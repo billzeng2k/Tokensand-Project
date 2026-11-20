@@ -1,5 +1,7 @@
 # Google Calendar through Airbyte
 
+> **Current app onboarding:** follow [GOOGLE_SIGN_IN.md](GOOGLE_SIGN_IN.md) for Google sign-in, in-app Calendar consent, per-user storage, and Erica’s Windows/WSL setup. Older Desktop-client commands below apply only to the legacy integration lab. The shopper app requires a Web OAuth client and never exposes the legacy workspace to signed-in users.
+
 We run the official `airbyte/source-google-calendar:1.1.0` Docker connector directly using the Airbyte protocol. This is a local source integration, not a full Airbyte server or Airbyte Cloud deployment. No Airbyte account is required. Gmail is deferred; we request no Gmail scopes.
 
 ## Mac and Erica's Windows setup

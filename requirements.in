@@ -2,3 +2,6 @@ cognee[gliner]==1.6.10
 pymysql
 python-dotenv
 pytest
+
+google-auth[requests]==2.62.2
+cryptography

@@ -8,6 +8,7 @@ import re
 import sqlite3
 import uuid
 from .config import LOCAL
+from . import tenancy
 
 DB = LOCAL / 'agent-traces.sqlite3'
 DEFAULTS = {'agent_enabled':True,'web_enabled':True,'proactive_enabled':False,
@@ -30,8 +31,9 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 @contextmanager
 def db():
-    DB.parent.mkdir(parents=True,exist_ok=True)
-    conn=sqlite3.connect(DB,timeout=15);conn.row_factory=sqlite3.Row
+    path = tenancy.directory() / 'agent-traces.sqlite3' if tenancy.USER.get() else DB
+    path.parent.mkdir(parents=True,exist_ok=True)
+    conn=sqlite3.connect(path,timeout=15);conn.row_factory=sqlite3.Row
     conn.executescript('''
     CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, title TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, created_at TEXT NOT NULL, mode TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL);
@@ -43,7 +45,7 @@ def db():
     CREATE TABLE IF NOT EXISTS review_tasks(id TEXT PRIMARY KEY, run_id TEXT UNIQUE NOT NULL, payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS scans(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL);
     ''')
-    os.chmod(DB,0o600)
+    os.chmod(path,0o600)
     try:
         yield conn
         conn.commit()
@@ -60,7 +62,8 @@ def analytics_id():
 
 def settings():
     with db() as c:r=c.execute('SELECT payload FROM settings WHERE id=1').fetchone()
-    return {**DEFAULTS,**(json.loads(r[0]) if r else {})}
+    defaults = {**DEFAULTS, 'preferences': ''} if tenancy.USER.get() else DEFAULTS
+    return {**defaults,**(json.loads(r[0]) if r else {})}
 
 
 def set_settings(values):
@@ -69,6 +72,8 @@ def set_settings(values):
     for key,value in values.items():
         expected=type(DEFAULTS[key])
         if type(value) is not expected:raise ValueError(f'Invalid {key}')
+    if tenancy.USER.get() and (values.get('memory_backend') == 'cognee' or values.get('mirror_singlestore')):
+        raise ValueError('Shared legacy memory and trace mirroring are disabled for accounts')
     current.update(values)
     for key,low,high in [('interval_minutes',5,1440),('lookahead_days',1,90),('max_daily_runs',1,20),('budget_cents',100,1000000)]:
         if not low<=current[key]<=high:raise ValueError(f'Invalid {key}')

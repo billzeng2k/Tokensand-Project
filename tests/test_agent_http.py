@@ -18,7 +18,7 @@ def http(tmp_path,monkeypatch):
 
 
 def call(base,path,body=None,headers=None):
-    request=urllib.request.Request(base+path,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json',**(headers or {})})
+    request=urllib.request.Request(base+path,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json','Origin':base,**(headers or {})})
     try:
         with urllib.request.urlopen(request) as r:return r.status,json.load(r),r.headers
     except urllib.error.HTTPError as r:return r.code,json.load(r),r.headers
@@ -43,6 +43,8 @@ def test_admin_surface_rejects_shopper_runs(http):
 
 def test_shopper_surface_has_no_admin_routes(tmp_path,monkeypatch):
     monkeypatch.setattr(ledger,'DB',tmp_path/'shopper.db')
+    from tokensand import auth
+    monkeypatch.setattr(auth,'user',lambda handler:{'id':None})
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     base=f'http://127.0.0.1:{server.server_port}'

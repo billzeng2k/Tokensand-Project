@@ -13,13 +13,17 @@ npm ci
 npm run app
 ```
 
-- **App:** http://localhost:8787 — try **A Christmas party** in demo mode.
+- **App:** http://localhost:8787 — sign in, then try **A Christmas party** in preview mode.
 - **Admin:** http://localhost:8788/ — inspect conversations/traces, feedback, metrics and controls.
 - **Integration lab:** http://localhost:8788/lab — existing Cognee/SingleStore deterministic scenarios and Airbyte sync.
 
 The main app contains only shopping, events, saved plans and personal preferences. Admin is separate and token-protected: run `npm run admin:token` to sign in on port 8788.
 
 Preview mode uses simulated Amazon-style products/prices/ratings, no LLM calls and no purchases. Live research is implemented through OpenAI Responses web search with Amazon-only domain filtering; it needs an API key and has not been live-tested in this local-first setup. Unknown prices/ratings remain unavailable. Sourced claims are not independently verified. No checkout or payment exists.
+
+## Google accounts and Calendar
+
+The app now requires Google sign-in. Users connect Calendar inside UpNext; developers configure one **Web application OAuth client** first. Follow [Google sign-in setup for Bill and Erica](docs/GOOGLE_SIGN_IN.md). Each account has separate preferences, calendars, conversations and traces. The old Desktop OAuth/CLI flow is retained only for the legacy integration lab.
 
 ## Setup guides
 

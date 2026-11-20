@@ -11,7 +11,7 @@ import threading
 import time
 from urllib.parse import urlparse,parse_qs
 from . import observability as ledger
-from . import agent
+from . import agent, tenancy, auth
 
 POOL=ThreadPoolExecutor(max_workers=1)
 SCAN_LOCK=threading.Lock()
@@ -47,7 +47,7 @@ def submit(prompt,mode,cid=None,trigger='manual',event_id=None):
         try:agent.execute(run['id'])
         finally:
             with QUEUE_LOCK:ACTIVE.discard(run['id'])
-    POOL.submit(work)
+    tenancy.enqueue(POOL,work)
     return run
 
 
@@ -80,11 +80,14 @@ def scan():
 
 
 def scheduler():
-    global LAST_SCAN
+    last = {}
     while not STOP.wait(15):
-        settings=ledger.settings()
-        if settings['proactive_enabled'] and time.monotonic()-LAST_SCAN>=settings['interval_minutes']*60:
-            LAST_SCAN=time.monotonic();POOL.submit(scan)
+        for uid in [None] + [u['id'] for u in auth.users()]:
+            with tenancy.scope(uid):
+                settings = ledger.settings()
+                if settings['proactive_enabled'] and time.monotonic()-last.get(uid,0)>=settings['interval_minutes']*60:
+                    last[uid]=time.monotonic()
+                    tenancy.enqueue(POOL,scan)
 
 
 def ensure_admin_token():
@@ -100,7 +103,8 @@ def ensure_admin_token():
 
 
 def startup():
-    ledger.recover()
+    for uid in [None] + [u['id'] for u in auth.users()]:
+        with tenancy.scope(uid):ledger.recover()
     threading.Thread(target=scheduler,name='upnext-calendar-scheduler',daemon=True).start()
 
 
@@ -108,7 +112,8 @@ def get(handler,path):
     if not path.startswith(('/api/agent/','/api/admin/')):return False
     admin=path.startswith('/api/admin/')
     if admin and not admin_allowed(handler):handler.send({'error':'Admin sign-in required'},401);return True
-    if path=='/api/agent/status':handler.send(status())
+    if path=='/api/admin/users':handler.send({'users':auth.users()})
+    elif path=='/api/agent/status':handler.send(status())
     elif path=='/api/agent/conversations':handler.send({'conversations':ledger.conversations()})
     elif path.startswith('/api/agent/conversations/'):
         handler.send({'runs':ledger.conversation(path.rsplit('/',1)[-1])})
@@ -145,12 +150,12 @@ def post(handler,path,body):
             if set(body)-{'preferences','budget_cents'}:raise ValueError('Only shopping preferences and budget can be updated here.')
             saved=ledger.set_settings(body);handler.send({'preferences':saved['preferences'],'budget_cents':saved['budget_cents']})
         elif path=='/api/agent/feedback':
-            run=ledger.feedback(body.get('run_id'),body.get('value'));POOL.submit(agent.flush_events);handler.send({'feedback':run['feedback']})
+            run=ledger.feedback(body.get('run_id'),body.get('value'));tenancy.enqueue(POOL,agent.flush_events);handler.send({'feedback':run['feedback']})
         elif path=='/api/admin/settings':handler.send({'settings':ledger.set_settings(body)})
         elif path=='/api/admin/scan':
-            POOL.submit(scan);handler.send({'queued':True},202)
+            tenancy.enqueue(POOL,scan);handler.send({'queued':True},202)
         elif path=='/api/admin/telemetry/retry':
-            POOL.submit(agent.flush_events);handler.send({'queued':True},202)
+            tenancy.enqueue(POOL,agent.flush_events);handler.send({'queued':True},202)
         else:handler.send({'error':'Not found'},404)
     except (ValueError,TypeError) as exc:handler.send({'error':str(exc)},400)
     return True

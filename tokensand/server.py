@@ -11,7 +11,7 @@ from .config import ROOT, LOCAL
 from .storage import Store, MemoryStore
 from .tools import FixtureTools, SCENARIOS
 from .workflow import run, telemetry
-from . import agent_api
+from . import agent_api, auth, tenancy
 
 JOBS = {}
 LOCK = threading.Lock()
@@ -56,6 +56,11 @@ def sync_calendar(job_id):
 
 class Handler(BaseHTTPRequestHandler):
     admin_surface = False
+    def end_headers(self):
+        self.send_header('X-Content-Type-Options','nosniff')
+        self.send_header('Referrer-Policy','no-referrer')
+        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        super().end_headers()
     def send(self, value, status=200):
         data=json.dumps(value).encode()
         self.send_response(status)
@@ -65,7 +70,33 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(data)
     def valid_host(self):
         return self.headers.get('Host') in {f'localhost:{self.server.server_port}', f'127.0.0.1:{self.server.server_port}'}
+    def log_message(self, format, *args):
+        # BaseHTTPRequestHandler otherwise logs OAuth callback codes in request URLs.
+        pass
     def do_GET(self):
+        path=urlparse(self.path).path
+        if not self.valid_host():return self.send({'error':'host_rejected'},403)
+        if not self.admin_surface:
+            if path=='/auth/me':
+                account=auth.user(self)
+                return self.send({'user':{k:account[k] for k in ('name','email')} if account else None,'configured':auth.configured()})
+            if path=='/auth/google/start':return auth.start(self,'login')
+            if path=='/auth/google/calendar':return auth.start(self,'calendar')
+            if path=='/auth/google/callback':return auth.callback(self)
+        self.scoped_request(self.get_scoped, path)
+    def scoped_request(self, fn, path):
+        uid=None
+        if not self.admin_surface and path.startswith('/api/'):
+            account=auth.user(self)
+            if not account:return self.send({'error':'Sign in with Google to continue.'},401)
+            uid=account['id']
+        if self.admin_surface and path.startswith('/api/'):
+            uid=self.headers.get('X-UpNext-User') or None
+            if uid and (not agent_api.admin_allowed(self) or uid not in {u['id'] for u in auth.users()}):
+                return self.send({'error':'Account not found'},404)
+        with tenancy.scope(uid):
+            return fn()
+    def get_scoped(self):
         if not self.valid_host(): return self.send({'error':'host_rejected'},403)
         path=urlparse(self.path).path
         if self.admin_surface:
@@ -89,6 +120,11 @@ class Handler(BaseHTTPRequestHandler):
         data=(ROOT / 'web' / filename).read_bytes()
         self.send_response(200); self.send_header('Content-Type',content_type); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
     def do_POST(self):
+        if not self.valid_host():return self.send({'error':'host_rejected'},403)
+        allowed={f'http://localhost:{self.server.server_port}',f'http://127.0.0.1:{self.server.server_port}'}
+        if self.headers.get('Origin') not in allowed:return self.send({'error':'origin_rejected'},403)
+        self.scoped_request(self.post_scoped,self.path)
+    def post_scoped(self):
         if not self.valid_host(): return self.send({'error':'host_rejected'},403)
         origin=self.headers.get('Origin')
         allowed={f'http://localhost:{self.server.server_port}',f'http://127.0.0.1:{self.server.server_port}'}
@@ -99,9 +135,18 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length < 10000: raise ValueError()
             body=json.loads(self.rfile.read(length))
             if not isinstance(body, dict): raise ValueError()
+            if not self.admin_surface and self.path=='/auth/logout':return auth.logout(self)
             if self.admin_surface:
                 if not self.path.startswith('/api/admin/') and self.path not in ('/api/runs','/api/calendar/sync'):return self.send({'error':'not_found'},404)
                 if not self.path.startswith('/api/admin/') and not agent_api.admin_allowed(self):return self.send({'error':'Admin sign-in required'},401)
+            elif self.path in ('/api/calendar/sync','/api/calendar/disconnect'):
+                if self.path.endswith('/disconnect'):
+                    auth.disconnect(tenancy.USER.get());return self.send({'ok':True})
+                try:
+                    from .calendar import sync
+                    return self.send(sync())
+                except Exception:
+                    return self.send({'error':'Calendar sync failed. Retry or reconnect Google Calendar. Your previous snapshot was preserved.'},502)
             elif not self.path.startswith('/api/agent/'):return self.send({'error':'not_found'},404)
             if agent_api.post(self,self.path,body): return
             if self.path not in ('/api/runs','/api/calendar/sync'): return self.send({'error':'not_found'},404)
@@ -109,7 +154,7 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     if any(j['state']=='running' for j in JOBS.values()): return self.send({'error':'A run is already in progress.'},409)
                     job_id=str(uuid.uuid4()); JOBS[job_id]={'state':'running'}
-                WORKER.submit(sync_calendar, job_id)
+                tenancy.enqueue(WORKER,sync_calendar, job_id)
                 return self.send({'id':job_id},202)
             event_id=body.get('event_id')
             if event_id is not None and (not isinstance(event_id, str) or len(event_id)!=64): raise ValueError()
@@ -122,7 +167,7 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             if any(j['state']=='running' for j in JOBS.values()): return self.send({'error':'A run is already in progress.'},409)
             job_id=str(uuid.uuid4()); JOBS[job_id]={'state':'running'}
-        WORKER.submit(execute,job_id,scenario,integration,event_id)
+        tenancy.enqueue(WORKER,execute,job_id,scenario,integration,event_id)
         return self.send({'id':job_id},202)
 
 class AdminHandler(Handler):

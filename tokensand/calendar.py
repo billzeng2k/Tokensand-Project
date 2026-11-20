@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import threading
 from .config import LOCAL
+from . import tenancy, auth
 
 IMAGE = 'airbyte/source-google-calendar:1.1.0'
 CONFIG = LOCAL / 'airbyte-calendar.json'
@@ -52,11 +53,17 @@ def connector(command, files):
         return messages
 
 
+def snapshot_path():
+    return tenancy.directory() / 'calendar-events.json' if tenancy.USER.get() else SNAPSHOT
+
+def connected():
+    return auth.connected(tenancy.USER.get()) if tenancy.USER.get() else CONFIG.exists()
+
 def sync():
     with SYNC_LOCK:
-        if not CONFIG.exists():
+        if not connected():
             raise RuntimeError('Connect Google first: run npm run calendar:connect. See docs/AIRBYTE.md.')
-        config = json.loads(CONFIG.read_text())
+        config = auth.calendar_config(tenancy.USER.get()) if tenancy.USER.get() else json.loads(CONFIG.read_text())
         if not config.get('calendarid'): raise ValueError('Choose one calendarid; syncing all calendars is disabled.')
         discovered = connector('discover', {'config': config})
         streams = [s for m in discovered for s in m.get('catalog', {}).get('streams', []) if s['name'] == 'events']
@@ -75,7 +82,7 @@ def sync():
             key = (r['calendar_id'], r['id'])
             if key not in records or r.get('updated', '') >= records[key].get('updated', ''): records[key] = r
         snapshot = {'synced_at': datetime.now(timezone.utc).isoformat(), 'connector': IMAGE, 'records': list(records.values())}
-        private_json(SNAPSHOT, snapshot)
+        private_json(snapshot_path(), snapshot)
         return view(snapshot)
 
 
@@ -94,13 +101,13 @@ def normalize(r, synced_at):
 
 def view(snapshot=None, today=None):
     if snapshot is None:
-        snapshot = json.loads(SNAPSHOT.read_text()) if SNAPSHOT.exists() else {'records': [], 'synced_at': None}
+        snapshot = json.loads(snapshot_path().read_text()) if snapshot_path().exists() else {'records': [], 'synced_at': None}
     today = today or date.today()
     events = []
     for r in snapshot['records']:
         e = normalize(r, snapshot['synced_at'])
         if e and today <= date.fromisoformat(e['date']) <= today + timedelta(days=90): events.append(e)
-    return {'connected': CONFIG.exists(), 'synced_at': snapshot['synced_at'], 'events': sorted(events, key=lambda e: (e['date'], e['id'])),
+    return {'connected': connected(), 'synced_at': snapshot['synced_at'], 'events': sorted(events, key=lambda e: (e['date'], e['id'])),
             'note': 'Next 90 days. Recurring series are excluded until occurrence expansion is implemented. Calendar dates retain their source timezone.'}
 
 

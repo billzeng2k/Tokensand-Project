@@ -1,5 +1,7 @@
 # Local setup for Bill and Erica
 
+> **Current app onboarding:** follow [GOOGLE_SIGN_IN.md](GOOGLE_SIGN_IN.md) for Google sign-in, in-app Calendar consent, per-user storage, and Erica’s Windows/WSL setup. Older Desktop-client commands below apply only to the legacy integration lab. The shopper app requires a Web OAuth client and never exposes the legacy workspace to signed-in users.
+
 This is the local calendar-to-shopping development harness. It is separate from the static Cartwise page in `index.html`; the page does not call this backend yet.
 
 ## What runs where
