@@ -29,8 +29,8 @@ Existing SQLite stores upgrade automatically with additive tables. No reset or m
 - Click a calendar event. Its shareable local route is `/#event-details/<event-id>`. Refreshing keeps the selected event after Google session restoration. Each account can only open its own synced events.
 - Use the right-hand chat to ask for something specific, such as “I also want a turkey hat.” New products are appended to the event's recommendations and deduplicated by Amazon product ID. Existing recommendations remain visible during research or if a later request fails.
 - The page polls pending runs every 1.5 seconds, including after refresh. Progress follows the saved run state; completed/failed/blocked/interrupted runs stop polling. Network errors are shown and retried. There is no server-sent-event stream.
-- **✓ Purchased** records your report that you purchased the item. It never checks out or charges you. The item moves to Purchase history, with its event and the time you marked it. Displayed prices are observed recommendation prices, not receipt totals. Undo restores the item.
-- **× Not for me** hides an item for that event. Restore it under “Not buying for this event.” A dismissal is not treated as permanent dislike of a brand or category.
+- **Mark purchased** records your report that you purchased the item. It never checks out or charges you. The item stays highlighted green in the event and is also saved to Purchase history, with its event and the time you marked it. Displayed prices are observed recommendation prices, not receipt totals. Undo clears the purchase highlight and removes its purchase-history entry.
+- **× Not for me** keeps the card visible in grey. Restore it on the card or mark it purchased to change your decision. A dismissal is not treated as permanent dislike of a brand or category.
 - Check **Remember this for future events** before sending a preference. The exact note is stored in your account and used in future research. View or forget notes under “What UpNext remembers.” Purchased items are supplied as user-reported possessions so the model can avoid duplicates.
 
 ## Persistence and telemetry
