@@ -81,14 +81,10 @@ def scan():
 
 
 def scheduler():
-    last = {}
+    from .automation import tick
     while not STOP.wait(15):
-        for uid in [None] + [u['id'] for u in auth.users()]:
-            with tenancy.scope(uid):
-                settings = ledger.settings()
-                if settings['proactive_enabled'] and time.monotonic()-last.get(uid,0)>=settings['interval_minutes']*60:
-                    last[uid]=time.monotonic()
-                    tenancy.enqueue(POOL,scan)
+        try:tick(POOL)
+        except Exception:pass # A transient account/database issue must not stop scheduling.
 
 
 def ensure_admin_token():
@@ -115,6 +111,9 @@ def get(handler,path):
     if admin and not admin_allowed(handler):handler.send({'error':'Admin sign-in required'},401);return True
     if path=='/api/admin/users':handler.send({'users':auth.users()})
     elif path=='/api/agent/status':handler.send(status())
+    elif path=='/api/agent/automation':
+        from .automation import status as automation_status
+        handler.send(automation_status())
     elif path=='/api/agent/shopping':handler.send(shopping.state())
     elif path=='/api/agent/conversations':handler.send({'conversations':ledger.conversations()})
     elif path.startswith('/api/agent/conversations/'):
@@ -148,6 +147,9 @@ def post(handler,path,body):
             if cid is not None and (not isinstance(cid,str) or len(cid)>50):raise ValueError('Invalid conversation')
             if event_id is not None and (not isinstance(event_id,str) or len(event_id)!=64):raise ValueError('Invalid calendar event')
             run=submit(prompt,mode,cid,event_id=event_id);handler.send({'id':run['id'],'conversation_id':run['conversation_id']},202)
+        elif path=='/api/agent/automation':
+            from .automation import save, status as automation_status
+            save(body);handler.send(automation_status())
         elif path=='/api/agent/thumbnails':
             from .thumbnails import refresh
             refresh(body.get('event_id'));handler.send(shopping.state())
