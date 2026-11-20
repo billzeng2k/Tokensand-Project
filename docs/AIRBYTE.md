@@ -33,9 +33,9 @@ Google may expire refresh tokens after seven days for External apps in Testing; 
 
 `Google Calendar → Airbyte events stream → private atomic snapshot → selected event + preferences → Amazon research (or labeled preview) → grouped review plan + audit`
 
-Only the `events` stream is selected. Each sync performs a full refresh of the single configured calendar; there is no `start_date` cutoff because that field filters modification dates, not upcoming occasions. The app then shows the next 90 calendar days. Full refresh is a deliberate small-calendar MVP choice; incremental sync/checkpoints are future work. Optional proactive scans are configured in the private admin console and require the local server to remain running.
+Only the `events` stream is selected. Each sync performs a full refresh of the single configured calendar; there is no `start_date` cutoff because that field filters modification dates, not upcoming occasions. The app then shows the next 365 calendar days. Full refresh is a deliberate small-calendar MVP choice; incremental sync/checkpoints are future work. Optional proactive scans are configured in the private admin console and require the local server to remain running.
 
-The connector returns recurring series without expanding occurrences. Series with a recurrence rule are excluded in this first version; use a one-off event for the demo. Returned concrete exceptions can appear. Dates retain the event's source timezone, with the local machine date determining the 90-day display window.
+The connector returns recurring series without expanding occurrences. UpNext expands supported rules locally for the calendar view, including supplied exceptions and cancellations. Dates retain the event's source timezone; the local machine date anchors the 365-day display window. Unsupported or excessive recurrence expansion produces a visible warning.
 
 Calendar identity includes both `calendar_id` and Google event ID. Task deduplication also includes the event revision (`updated`), so a changed event can create a new review task; old tasks remain historical and are not automatically withdrawn. Before a new run, a removed/cancelled/out-of-window event is treated as unavailable and cannot create a task. A failed or incomplete sync preserves the previous snapshot but **blocks the new run**, rather than silently using stale evidence.
 
@@ -53,6 +53,6 @@ To disconnect, revoke the app in your Google Account's third-party connections a
 
 ## Next integrations
 
-Gmail is a future opt-in connector for receipts, shipping updates and purchase history. No Gmail code or scopes are enabled. Add future sources behind the same normalized event boundary, with their own consent, freshness, cancellation and deduplication rules. Recurring-event expansion is future work. Optional background scans and the live Amazon research path are described in [AGENT_AND_ADMIN.md](AGENT_AND_ADMIN.md); live research still requires a configured API key and end-to-end verification.
+Gmail is a future opt-in connector for receipts, shipping updates and purchase history. No Gmail code or scopes are enabled. Add future sources behind the same normalized event boundary, with their own consent, freshness, cancellation and deduplication rules. Additional calendar selection and editable buy-by planning are future work. Optional background scans and the live Amazon research path are described in [AGENT_AND_ADMIN.md](AGENT_AND_ADMIN.md); live research still requires a configured API key and end-to-end verification.
 
 References: [Airbyte Calendar connector](https://docs.airbyte.com/integrations/sources/google-calendar), [Airbyte protocol](https://docs.airbyte.com/platform/understanding-airbyte/airbyte-protocol), [Google Desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app), [Google OAuth token expiration](https://developers.google.com/identity/protocols/oauth2#expiration).

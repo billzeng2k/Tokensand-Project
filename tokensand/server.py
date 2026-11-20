@@ -114,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
             job_id=path.rsplit('/',1)[-1]
             with LOCK: job=JOBS.get(job_id)
             return self.send(job or {'error':'not_found'},200 if job else 404)
-        files=({'/':('admin.html','text/html'),'/admin':('admin.html','text/html'),'/lab':('index.html','text/html'),'/admin.js':('admin.js','text/javascript'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css'),'/console.css':('console.css','text/css')} if self.admin_surface else {'/':('agent.html','text/html'),'/agent.js':('agent.js','text/javascript'),'/console.css':('console.css','text/css')})
+        files=({'/':('admin.html','text/html'),'/admin':('admin.html','text/html'),'/lab':('index.html','text/html'),'/admin.js':('admin.js','text/javascript'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css'),'/console.css':('console.css','text/css')} if self.admin_surface else {'/':('agent.html','text/html'),'/agent.js':('agent.js','text/javascript'),'/calendar-view.js':('calendar-view.js','text/javascript'),'/console.css':('console.css','text/css')})
         if path not in files: return self.send({'error':'not_found'},404)
         filename, content_type=files[path]
         data=(ROOT / 'web' / filename).read_bytes()

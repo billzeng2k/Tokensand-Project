@@ -1,3 +1,4 @@
+import {renderCalendar} from '/calendar-view.js';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let current=null,polling=false,researchMode="demo";
 async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(r.status===401){$('#shopping-workspace').hidden=true;$('#google-login').hidden=false;$('#logout').hidden=true;current=null;render([]);}if(!r.ok)throw Error(d.error||'Request failed');return d;}
@@ -32,6 +33,7 @@ $('#agent-form').onsubmit=async e=>{
 $('#preferences-form').onsubmit=async e=>{e.preventDefault();try{await api('/api/agent/preferences',{preferences:$('#personal-preferences').value,budget_cents:Math.round(Number($('#item-budget').value)*100)});$('#preferences-status').textContent='Saved. We’ll use these for your next recommendations.';}catch(e){fail(e);}};
 async function refreshCalendar(){
  const cal=await api('/api/calendar');
+ renderCalendar(cal,event=>{if(polling)return;$('#event').value=event.id;$('#message').value=`Help me prepare for ${event.title} on ${event.date}. Consider what I already own and whether I need to buy anything.`;$('#agent-form').scrollIntoView({behavior:'smooth',block:'start'});$('#message').focus({preventScroll:true});});
  $('#connect-calendar').textContent=cal.connected?'Reconnect Google Calendar':'Connect Google Calendar';
  $('#sync-calendar').hidden=!cal.connected;$('#disconnect-calendar').hidden=!cal.connected;
  $('#event').innerHTML='<option value="">Choose an event, or tell us what’s coming up</option>'+cal.events.map(e=>`<option value="${esc(e.id)}">${esc(e.date)} · ${esc(e.title)}</option>`).join('');
