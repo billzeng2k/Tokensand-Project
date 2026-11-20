@@ -64,3 +64,6 @@ if(connection==='failed')$('#connection-message').textContent='Google connection
 if(connection==='calendar')$('#connection-message').textContent='Calendar connected. Select Sync calendar to load your events.';
 if(connection)history.replaceState(null,'','/');
 init().catch(e=>{$('#connection-message').textContent=e.message;});
+
+function updateNavigation(){for(const link of document.querySelectorAll(".sidebar .nav")){const active=link.hash===(location.hash==="#saved-plans"?"#saved-plans":"#calendar-view");link.classList.toggle("active",active);if(active)link.setAttribute("aria-current","location");else link.removeAttribute("aria-current");}}
+window.addEventListener("hashchange",updateNavigation);updateNavigation();

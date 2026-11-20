@@ -1,5 +1,7 @@
 # Google sign-in and Calendar: Bill and Erica
 
+For Erica’s own Windows development credentials, start with [the Windows walkthrough](WINDOWS_GOOGLE_OAUTH.md).
+
 ## User experience
 
 Open http://localhost:8787, select **Sign in with Google**, then **Connect Google Calendar**. Approve read-only Calendar access using the **same Google account**, then select **Sync calendar**. Upcoming events appear in the occasion selector. Sign-in alone does not grant Calendar access. Users never provide API keys, download credential files, or open Airbyte's dashboard.

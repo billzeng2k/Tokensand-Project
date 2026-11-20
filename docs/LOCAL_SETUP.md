@@ -154,7 +154,7 @@ For a shared hosted website, only the backend developer needs these services. Ho
 
 ## Optional real Google Calendar source
 
-Follow [AIRBYTE.md](AIRBYTE.md) to install the Airbyte source, create a Google Desktop OAuth client, sign in and use real events in the local app. Erica should follow its WSL2 instructions and authorize her own Google account. Gmail stays on the roadmap; no email access is requested.
+Follow [Erica’s Windows Google OAuth walkthrough](WINDOWS_GOOGLE_OAUTH.md) to create a Web OAuth client and connect Calendar inside the app. Desktop OAuth commands in [AIRBYTE.md](AIRBYTE.md) are only for the legacy lab. Gmail stays on the roadmap; no email access is requested.
 
 ## UpNext agent and admin (current entry points)
 
