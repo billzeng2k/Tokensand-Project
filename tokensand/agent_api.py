@@ -24,7 +24,7 @@ LAST_SCAN=0
 
 def admin_allowed(handler):
     token=os.getenv('UPNEXT_ADMIN_TOKEN','')
-    if not token:return True # Dev-only; Host and Origin checks enforced by HTTP handler.
+    if not token:return False
     cookies=SimpleCookie()
     try:cookies.load(handler.headers.get('Cookie',''))
     except Exception:return False
@@ -36,7 +36,7 @@ def status():
     return {'provider':'openai-responses-web-search','live_available':bool(os.getenv('OPENAI_API_KEY')),
             'model':os.getenv('OPENAI_MODEL','gpt-6.2-astra'),'amplitude_mode':os.getenv('AMPLITUDE_MODE','local'),
             'statsig_mode':os.getenv('STATSIG_MODE','local'),'admin_auth_configured':bool(os.getenv('UPNEXT_ADMIN_TOKEN')),
-            'storage':'local SQLite trace ledger','settings':{k:v for k,v in ledger.settings().items() if k in ('agent_enabled','web_enabled','proactive_enabled','proactive_mode','budget_cents','memory_backend')}}
+            'storage':'local SQLite trace ledger','settings':{k:v for k,v in ledger.settings().items() if k in ('agent_enabled','web_enabled','proactive_enabled','proactive_mode','budget_cents','memory_backend','preferences')}}
 
 
 def submit(prompt,mode,cid=None,trigger='manual',event_id=None):
@@ -87,6 +87,18 @@ def scheduler():
             LAST_SCAN=time.monotonic();POOL.submit(scan)
 
 
+def ensure_admin_token():
+    from .config import LOCAL
+    if os.getenv('UPNEXT_ADMIN_TOKEN'):return os.environ['UPNEXT_ADMIN_TOKEN']
+    path=LOCAL/'admin-token'
+    try:
+        fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        with os.fdopen(fd,'w') as f:f.write(secrets.token_urlsafe(32))
+    except FileExistsError:pass
+    os.environ['UPNEXT_ADMIN_TOKEN']=path.read_text().strip()
+    return os.environ['UPNEXT_ADMIN_TOKEN']
+
+
 def startup():
     ledger.recover()
     threading.Thread(target=scheduler,name='upnext-calendar-scheduler',daemon=True).start()
@@ -117,7 +129,7 @@ def post(handler,path,body):
     if not path.startswith(('/api/agent/','/api/admin/')):return False
     if path=='/api/admin/login':
         token=os.getenv('UPNEXT_ADMIN_TOKEN','');provided=body.get('token','')
-        if not isinstance(provided,str) or (token and not hmac.compare_digest(token,provided)):
+        if not token or not isinstance(provided,str) or not hmac.compare_digest(token,provided):
             handler.send({'error':'Invalid admin token'},401);return True
         sid=secrets.token_urlsafe(32);SESSIONS[sid]=time.time()+8*3600
         handler.send_response(200);handler.send_header('Content-Type','application/json');handler.send_header('Cache-Control','no-store');handler.send_header('Set-Cookie',f'upnext_admin={sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800');handler.end_headers();handler.wfile.write(b'{"ok":true}');return True
@@ -129,6 +141,9 @@ def post(handler,path,body):
             if cid is not None and (not isinstance(cid,str) or len(cid)>50):raise ValueError('Invalid conversation')
             if event_id is not None and (not isinstance(event_id,str) or len(event_id)!=64):raise ValueError('Invalid calendar event')
             run=submit(prompt,mode,cid,event_id=event_id);handler.send({'id':run['id'],'conversation_id':run['conversation_id']},202)
+        elif path=='/api/agent/preferences':
+            if set(body)-{'preferences','budget_cents'}:raise ValueError('Only shopping preferences and budget can be updated here.')
+            saved=ledger.set_settings(body);handler.send({'preferences':saved['preferences'],'budget_cents':saved['budget_cents']})
         elif path=='/api/agent/feedback':
             run=ledger.feedback(body.get('run_id'),body.get('value'));POOL.submit(agent.flush_events);handler.send({'feedback':run['feedback']})
         elif path=='/api/admin/settings':handler.send({'settings':ledger.set_settings(body)})

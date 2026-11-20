@@ -2,7 +2,7 @@
 
 ## Scope and what is working
 
-UpNext has a local recommendation workspace at `/`, an admin observatory at `/admin`, and the previous deterministic integration harness at `/lab`. The active product scope is **Google Calendar occasions and Amazon.com shopping**, with USD prices. Gmail, additional retailers, Senso claim checks and checkout automation are future work.
+UpNext has a local recommendation workspace at `/`, a separately served admin observatory on port 8788, and the previous deterministic integration harness at `http://localhost:8788/lab`. The active product scope is **Google Calendar occasions and Amazon.com shopping**, with USD prices. Gmail, additional retailers, Senso claim checks and checkout automation are future work.
 
 The agent produces an event plan grouped into categories, with alternatives rather than a single flat list. A Christmas-party demo shows two trees, three stocking variants and two recipe ideas. Each product card contains a name, price, star rating/review count, relevance explanation and uncertainty notes. Live cards link to the Amazon product page. A recipe has ingredients, preparation steps and optional links to researched Amazon ingredients; it has no fabricated recipe rating or price.
 
@@ -20,7 +20,7 @@ npm ci
 npm run app
 ```
 
-Open http://localhost:8787 and select **A Christmas party**, then **Think ahead**. Open http://localhost:8787/admin to inspect the result. Select a run to see its conversation, sources, execution spans, flags, usage and telemetry delivery. Feedback is recorded once per run, and only when a user clicks a feedback choice. Demo feedback stays distinguishable from live feedback through the mode filter.
+Open http://localhost:8787 and select **A Christmas party**, then **Think ahead**. Open http://localhost:8788/ to inspect the result. Select a run to see its conversation, sources, execution spans, flags, usage and telemetry delivery. Feedback is recorded once per run, and only when a user clicks a feedback choice. Demo feedback stays distinguishable from live feedback through the mode filter.
 
 The new agent defaults to saved preferences and a local SQLite ledger, so it works without starting Cognee or SingleStore. Admin controls can enable local Cognee retrieval or mirror finished traces to SingleStore. These are genuine optional integrations; if Cognee fails, the run fails rather than inventing a memory result. If SingleStore mirroring fails, the local trace remains and records the mirror error. SingleStore mirrors snapshots at run completion; later feedback/telemetry retries remain authoritative in the local ledger.
 
@@ -74,7 +74,9 @@ The local process must remain running. This is not a hosted/background OS servic
 
 ## Admin access and local privacy
 
-The server binds to `127.0.0.1`, validates the Host header and rejects cross-origin POSTs. By default, `/admin` is a **single-user local developer console without a password**. Optionally set a long random `UPNEXT_ADMIN_TOKEN` in `.env` and restart. Admin routes then require sign-in, using an HttpOnly/SameSite=Strict session cookie valid for eight hours. This guards admin settings, not multiuser customer isolation: shopper conversation endpoints still belong to the one local workspace. Do not expose this server publicly. Production needs authentication, per-user ownership, TLS, rate limiting and a deployment/retention design.
+The server binds to `127.0.0.1`, validates the Host header and rejects cross-origin POSTs. Admin runs on a separate loopback listener at **http://localhost:8788** and always requires a token. The shopper listener on port 8787 does not serve admin pages, scripts, lab endpoints or admin APIs. On first startup a random owner-only `.local/admin-token` is created. Run `npm run admin:token` in your terminal to retrieve it, then sign in on port 8788. You may override it with `UPNEXT_ADMIN_TOKEN` in `.env`. Admin sessions use HttpOnly/SameSite=Strict cookies valid for eight hours. The lab APIs also require this session.
+
+The shopper app shows occasions, grouped shopping plans, follow-ups and personal preferences only. It chooses live research when an OpenAI key is configured, otherwise clearly labels sample recommendations. Budget/preferences can be edited in the shopper UI; feature gates, model configuration, telemetry and admin controls cannot. This is separation for a local single-user app, not a claim of complete production security. Customer conversation endpoints still belong to one local workspace. Do not expose this server publicly; hosted multiuser deployment needs identity/ownership enforcement, TLS, rate limits and an explicit retention design.
 
 `.local/agent-traces.sqlite3` stores conversations, messages, public model output, provided context, sources, spans, review tasks, feedback, automation reservations and the telemetry outbox. Files are gitignored; the SQLite file has owner-only permissions. There is no automatic retention deletion or encryption at rest. Keep exports private. Basic key/token patterns are redacted, but this is not comprehensive PII detection. Do not put credentials or sensitive personal details into prompts.
 

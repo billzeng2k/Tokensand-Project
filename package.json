@@ -15,7 +15,8 @@
     "calendar:connect": ".venv/bin/python scripts/connect_calendar.py",
     "calendar:sync": ".venv/bin/python -m tokensand.calendar sync",
     "calendar:status": ".venv/bin/python -m tokensand.calendar status",
-    "calendar:install": "docker pull --platform linux/amd64 airbyte/source-google-calendar:1.1.0"
+    "calendar:install": "docker pull --platform linux/amd64 airbyte/source-google-calendar:1.1.0",
+    "admin:token": ".venv/bin/python scripts/admin_token.py"
   },
   "dependencies": {
     "@amplitude/analytics-node": "1.5.85",

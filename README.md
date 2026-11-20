@@ -14,10 +14,12 @@ npm run app
 ```
 
 - **App:** http://localhost:8787 — try **A Christmas party** in demo mode.
-- **Admin:** http://localhost:8787/admin — inspect conversations/traces, feedback, metrics and controls.
-- **Integration lab:** http://localhost:8787/lab — existing Cognee/SingleStore deterministic scenarios and Airbyte sync.
+- **Admin:** http://localhost:8788/ — inspect conversations/traces, feedback, metrics and controls.
+- **Integration lab:** http://localhost:8788/lab — existing Cognee/SingleStore deterministic scenarios and Airbyte sync.
 
-Demo mode uses simulated Amazon-style products/prices/ratings, no LLM calls and no purchases. Live research is implemented through OpenAI Responses web search with Amazon-only domain filtering; it needs an API key and has not been live-tested in this local-first setup. Unknown prices/ratings remain unavailable. Sourced claims are not independently verified. No checkout or payment exists.
+The main app contains only shopping, events, saved plans and personal preferences. Admin is separate and token-protected: run `npm run admin:token` to sign in on port 8788.
+
+Preview mode uses simulated Amazon-style products/prices/ratings, no LLM calls and no purchases. Live research is implemented through OpenAI Responses web search with Amazon-only domain filtering; it needs an API key and has not been live-tested in this local-first setup. Unknown prices/ratings remain unavailable. Sourced claims are not independently verified. No checkout or payment exists.
 
 ## Setup guides
 

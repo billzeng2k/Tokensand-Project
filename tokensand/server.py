@@ -55,6 +55,7 @@ def sync_calendar(job_id):
 
 
 class Handler(BaseHTTPRequestHandler):
+    admin_surface = False
     def send(self, value, status=200):
         data=json.dumps(value).encode()
         self.send_response(status)
@@ -67,6 +68,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.valid_host(): return self.send({'error':'host_rejected'},403)
         path=urlparse(self.path).path
+        if self.admin_surface:
+            if path.startswith('/api/') and not path.startswith(('/api/admin/','/api/runs/')) and path not in ('/api/config','/api/calendar'):return self.send({'error':'not_found'},404)
+        elif path.startswith(('/api/admin/','/api/runs/')) or path=='/api/config':return self.send({'error':'not_found'},404)
+        if self.admin_surface and path.startswith('/api/') and not path.startswith('/api/admin/') and not agent_api.admin_allowed(self):return self.send({'error':'Admin sign-in required'},401)
         if agent_api.get(self,path): return
         if path == '/api/calendar':
             from .calendar import view
@@ -78,7 +83,7 @@ class Handler(BaseHTTPRequestHandler):
             job_id=path.rsplit('/',1)[-1]
             with LOCK: job=JOBS.get(job_id)
             return self.send(job or {'error':'not_found'},200 if job else 404)
-        files={'/':('agent.html','text/html'),'/lab':('index.html','text/html'),'/admin':('admin.html','text/html'),'/agent.js':('agent.js','text/javascript'),'/admin.js':('admin.js','text/javascript'),'/console.css':('console.css','text/css'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css')}
+        files=({'/':('admin.html','text/html'),'/admin':('admin.html','text/html'),'/lab':('index.html','text/html'),'/admin.js':('admin.js','text/javascript'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css'),'/console.css':('console.css','text/css')} if self.admin_surface else {'/':('agent.html','text/html'),'/agent.js':('agent.js','text/javascript'),'/console.css':('console.css','text/css')})
         if path not in files: return self.send({'error':'not_found'},404)
         filename, content_type=files[path]
         data=(ROOT / 'web' / filename).read_bytes()
@@ -94,6 +99,10 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length < 10000: raise ValueError()
             body=json.loads(self.rfile.read(length))
             if not isinstance(body, dict): raise ValueError()
+            if self.admin_surface:
+                if not self.path.startswith('/api/admin/') and self.path not in ('/api/runs','/api/calendar/sync'):return self.send({'error':'not_found'},404)
+                if not self.path.startswith('/api/admin/') and not agent_api.admin_allowed(self):return self.send({'error':'Admin sign-in required'},401)
+            elif not self.path.startswith('/api/agent/'):return self.send({'error':'not_found'},404)
             if agent_api.post(self,self.path,body): return
             if self.path not in ('/api/runs','/api/calendar/sync'): return self.send({'error':'not_found'},404)
             if self.path == '/api/calendar/sync':
@@ -116,11 +125,19 @@ class Handler(BaseHTTPRequestHandler):
         WORKER.submit(execute,job_id,scenario,integration,event_id)
         return self.send({'id':job_id},202)
 
+class AdminHandler(Handler):
+    admin_surface = True
+
+
 if __name__ == '__main__':
-    parser=argparse.ArgumentParser(); parser.add_argument('--port',type=int,default=8787); args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--port',type=int,default=8787);parser.add_argument('--admin-port',type=int,default=8788);args=parser.parse_args()
+    agent_api.ensure_admin_token()
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
+    admin=ThreadingHTTPServer(('127.0.0.1',args.admin_port),AdminHandler)
+    threading.Thread(target=admin.serve_forever,daemon=True).start()
     agent_api.startup()
     print(f'UpNext app: http://localhost:{args.port}',flush=True)
-    try: server.serve_forever()
-    except KeyboardInterrupt: pass
-    finally: server.server_close(); agent_api.STOP.set(); WORKER.shutdown(); agent_api.POOL.shutdown()
+    print(f'Private admin: http://localhost:{args.admin_port} (run npm run admin:token for your local sign-in token)',flush=True)
+    try:server.serve_forever()
+    except KeyboardInterrupt:pass
+    finally:server.server_close();admin.shutdown();admin.server_close();agent_api.STOP.set();WORKER.shutdown();agent_api.POOL.shutdown()
