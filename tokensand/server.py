@@ -145,7 +145,10 @@ class Handler(BaseHTTPRequestHandler):
                     auth.disconnect(tenancy.USER.get());return self.send({'ok':True})
                 try:
                     from .calendar import sync
-                    return self.send(sync())
+                    snapshot=sync()
+                    from .automation import after_sync
+                    after_sync(snapshot)
+                    return self.send(snapshot)
                 except Exception:
                     return self.send({'error':'Calendar sync failed. Retry or reconnect Google Calendar. Your previous snapshot was preserved.'},502)
             elif not self.path.startswith('/api/agent/'):return self.send({'error':'not_found'},404)

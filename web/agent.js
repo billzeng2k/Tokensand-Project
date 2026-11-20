@@ -67,18 +67,18 @@ document.addEventListener('click',async event=>{
  const button=action||forget;button.disabled=true;
  try{shopping=await api(action?'/api/agent/item-action':'/api/agent/memory',action?{run_id:action.dataset.run,source_url:action.dataset.url,action:action.dataset.itemAction}:{action:'forget',id:forget.dataset.forget});renderWorkspace();announce(forget?'Preference forgotten.':action.dataset.itemAction==='purchased'?'Marked purchased. Saved to purchase history.':action.dataset.itemAction==='dismissed'?'Removed for this event. You can restore it below.':'Restored.');}catch(error){fail(error);button.disabled=false;}
 });
-function setCalendarStatus(connected){$('#account-calendar-status').textContent=connected?'Connected':'Not connected';$('#account-panel').classList.toggle('calendar-connected',connected);}
+function setCalendarStatus(connected){$('#account-calendar-status').textContent=connected?'Connected':'Disconnected';$('#account-panel').classList.toggle('calendar-connected',connected);}
 async function refreshCalendar(){const cal=await api('/api/calendar');events=cal.events;setCalendarStatus(cal.connected);renderCalendar(cal,openCalendarEvent);$('#sync-calendar').hidden=!cal.connected;$('#disconnect-calendar').hidden=!cal.connected;$('#connect-calendar').textContent=cal.connected?'Reconnect Google Calendar':'Connect Google Calendar';route();return cal;}
 function openCalendarEvent(event){location.hash=`event-details/${event.id}`;route();}
 function route(){
- const isHistory=location.hash==='#saved-plans',match=location.hash.match(/^#event-details\/([a-f0-9]{64})$/),detail=!!match;
+ const isSettings=location.hash==='#settings',isHistory=location.hash==='#saved-plans',match=location.hash.match(/^#event-details\/([a-f0-9]{64})$/),detail=!!match;
  const nextEvent=match?events.find(e=>e.id===match[1])||null:null;
  if(selectedEvent?.id!==nextEvent?.id){if(selectedEvent)drafts[selectedEvent.id]=$('#message').value;$('#message').value=nextEvent?(drafts[nextEvent.id]||''):'';}
  selectedEvent=nextEvent;
- $('#calendar-page').hidden=isHistory||detail;$('#history-page').hidden=!isHistory;$('#event-page').hidden=!detail;$('.page-heading').hidden=true;document.body.classList.toggle('calendar-screen',!isHistory&&!detail);
+ $('#settings-page').hidden=!isSettings;$('#calendar-page').hidden=isHistory||detail||isSettings;$('#history-page').hidden=!isHistory;$('#event-page').hidden=!detail;$('.page-heading').hidden=true;document.body.classList.toggle('calendar-screen',!isHistory&&!detail&&!isSettings);
  $('.event-workspace').hidden=detail&&!selectedEvent;
  if(detail){$('#event-title').textContent=selectedEvent?.title||'Event not found';$('#event-date').textContent=selectedEvent?`${selectedEvent.date} · ${selectedEvent.all_day?'All day':(selectedEvent.start?.dateTime?.slice(11,16)||'')+' '+(selectedEvent.start?.timeZone||'')}`:'This event is no longer in your synced calendar. Return to Calendar or sync again.';current=selectedEvent?eventRuns(selectedEvent.id).at(-1)?.conversation_id||null:null;}
- for(const link of document.querySelectorAll('.sidebar .nav')){const active=link.hash===(isHistory?'#saved-plans':'#calendar-view');link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ for(const link of document.querySelectorAll('.sidebar .nav')){const active=link.hash===(isSettings?'#settings':isHistory?'#saved-plans':'#calendar-view');link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
  renderWorkspace();schedulePoll();refreshThumbnails();
 }
 window.addEventListener('hashchange',route);
@@ -87,9 +87,9 @@ function closeCalendarMenu(){calendarMenu.hidden=true;calendarToggle.setAttribut
 calendarToggle.onclick=()=>{calendarMenu.hidden=!calendarMenu.hidden;calendarToggle.setAttribute('aria-expanded',String(!calendarMenu.hidden));};
 document.addEventListener('click',event=>{if(!$('#account-panel').contains(event.target))closeCalendarMenu();});document.addEventListener('keydown',event=>{if(event.key==='Escape')closeCalendarMenu();});
 $('#logout').onclick=async()=>{try{await api('/auth/logout',{});location.href='/';}catch(error){fail(error);}};
-$('#sync-calendar').onclick=async()=>{const button=$('#sync-calendar');button.disabled=true;$('#sync-status').textContent='Syncing calendar…';try{await api('/api/calendar/sync',{});await refreshCalendar();$('#sync-status').textContent='Calendar synced.';}catch(error){$('#sync-status').textContent=error.message;}finally{button.disabled=false;}};
+$('#sync-calendar').onclick=async()=>{const button=$('#sync-calendar');button.disabled=true;$('#sync-status').textContent='Syncing calendar…';try{await api('/api/calendar/sync',{});await refreshCalendar();$('#sync-status').textContent='Calendar synced. Checking for new recommendations…';}catch(error){$('#sync-status').textContent=error.message;}finally{button.disabled=false;}};
 $('#disconnect-calendar').onclick=async()=>{try{await api('/api/calendar/disconnect',{});await refreshCalendar();$('#sync-status').textContent='Disconnected. Your saved purchases remain.';}catch(error){fail(error);}};
-async function init(){const account=await api('/auth/me');if(!account.user){$('#google-login').hidden=!account.configured;$('#account-note').textContent='Sign in to save your plans and purchases.';return;}authenticated=true;$('#account-title').textContent=account.user.name;$('#account-note').textContent=account.user.email;$('#google-login').hidden=true;$('#logout').hidden=false;$('#shopping-workspace').hidden=false;const status=await api('/api/agent/status');researchMode=status.live_available?'live':'demo';$('#provider-note').textContent=status.provider==='ollama-local'?'Local Qwen':'UpNext';shopping=await api('/api/agent/shopping');await refreshCalendar();await refreshRuns();route();}
+async function init(){const account=await api('/auth/me');if(!account.user){$('#google-login').hidden=!account.configured;$('#account-note').textContent='Sign in to save your plans and purchases.';return;}authenticated=true;$('#account-title').textContent=account.user.name;$('#account-note').textContent=account.user.email;$('#google-login').hidden=true;$('#logout').hidden=false;$('#shopping-workspace').hidden=false;const status=await api('/api/agent/status');researchMode=status.live_available?'live':'demo';$('#provider-note').textContent=status.provider==='ollama-local'?'Local Qwen':'UpNext';shopping=await api('/api/agent/shopping');await refreshCalendar();await refreshRuns();await loadAutomation();route();}
 init().catch(fail);
 
 async function refreshThumbnails(){
@@ -100,3 +100,10 @@ async function refreshThumbnails(){
  try{shopping=await api('/api/agent/thumbnails',{event_id:id});renderWorkspace();}
  catch(error){announce('Some product images could not be loaded. Reload to retry.');}
 }
+
+function showAutomation(data){const cfg=data.settings;$('#automation-enabled').checked=cfg.enabled;$('#automation-time').value=cfg.time;$('#automation-zone').value=cfg.timezone;$('#automation-days').value=cfg.lookahead_days;$('#automation-last').textContent=data.last_run?`Last run: ${data.last_run.status} · ${data.last_run.runs_created} events researched`:'No scheduled run yet.';}
+async function loadAutomation(){showAutomation(await api('/api/agent/automation'));}
+$('#automation-form').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{showAutomation(await api('/api/agent/automation',{enabled:$('#automation-enabled').checked,time:$('#automation-time').value,timezone:$('#automation-zone').value,lookahead_days:Number($('#automation-days').value)}));$('#automation-status').textContent='Schedule saved.';}catch(error){$('#automation-status').textContent=error.message;}finally{button.disabled=false;}};
+
+// Background calendar research can start without a chat message or an open event.
+setInterval(async()=>{if(!authenticated||document.hidden||allRuns.some(pending))return;try{await refreshRuns();if(location.hash==='#settings')await loadAutomation();}catch(error){fail(error);}},15000);

@@ -67,3 +67,15 @@ body.calendar-screen{height:100dvh;overflow:hidden}.calendar-screen .shell{heigh
 .shopper-app .single-item-category .product-grid{grid-template-columns:minmax(0,1fr)}
 .shopper-app .recommendation-categories .category-heading{align-items:start}
 .shopper-app .recommendation-categories .category-heading .badge{white-space:nowrap}
+
+.automation-panel{max-width:650px;margin-top:28px}.automation-panel label:not(.remember-choice){display:block;margin-top:18px}.automation-panel input:not([type=checkbox]){display:block;max-width:340px;width:100%;padding:10px;margin:6px 0 14px;border:1px solid var(--line);border-radius:8px}.automation-panel .remember-choice{margin:24px 0}
+
+/* Keep account details inside the connection menu in both states. */
+.shopper-app .app-top-nav #account-panel{border-radius:999px}
+.shopper-app .app-top-nav #account-panel:not(.calendar-connected){background:#fff1f2;border-color:#fecdd3}
+.shopper-app .account-card:not(.calendar-connected) .account-calendar-status{color:#be123c}
+.shopper-app .account-card:not(.calendar-connected) .gcal-icon{display:none}
+.shopper-app .account-card:not(.calendar-connected) .account-calendar-status::before{display:block;content:"";width:7px;height:7px;border-radius:50%;background:#e11d48;margin:0}
+.shopper-app .account-card #calendar-account-menu #account-title,.shopper-app .account-card #calendar-account-menu #account-note{display:block}
+.shopper-app .account-card #calendar-account-menu #logout:not([hidden]){display:block}
+.shopper-app #calendar-account-menu #account-title{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
