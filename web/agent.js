@@ -39,7 +39,7 @@ function renderHistory(){
  $('#purchased-items').innerHTML=rows.length?rows.map(d=>`<article class="purchase-row">${(d.item.image_url||shopping.images?.[d.item_key]?.image_url)?`<img src="${esc(d.item.image_url||shopping.images?.[d.item_key]?.image_url)}" alt="${esc(d.item.name)}" referrerpolicy="no-referrer">`:''}<div><h3>${esc(d.item.name)}</h3><p>${esc(d.item.variant||'')}</p><p class="hint">${esc(d.event_title)} · Marked purchased ${new Date(d.updated_at).toLocaleDateString()}</p><a href="${esc(d.item.source_url)}" target="_blank" rel="noopener noreferrer">View on Amazon</a><p class="hint">${d.item.price_cents==null?'Price unavailable':`Listed at $${(d.item.price_cents/100).toFixed(2)}`} · Marked by you, not a checkout receipt</p></div><button class="secondary" data-item-action="undo" data-run="${esc(d.run_id)}" data-url="${esc(d.item.source_url)}">Undo</button></article>`).join(''):'<div class="empty"><h3>No purchases yet</h3><p>Use the ✓ on a recommendation after you’ve purchased it.</p></div>';
 }
 function renderWorkspace(){
- const counts={};for(const event of events){const plan=combinedPlan(event.id),count=plan.result.groups.reduce((n,g)=>n+g.items.length,0);counts[event.id]={live:plan.mode==='live'?count:0,demo:plan.mode==='demo'?count:0};}updateRecommendationCounts(counts);
+ const counts={};for(const event of events){const plan=combinedPlan(event.id),count=plan.result.groups.reduce((n,g)=>n+g.items.length,0);counts[event.id]={pending:eventRuns(event.id).some(pending),live:plan.mode==='live'?count:0,demo:plan.mode==='demo'?count:0};}updateRecommendationCounts(counts);
  renderMemory();renderHistory();
  if(!selectedEvent)return;
  const runs=eventRuns(selectedEvent.id),plan=combinedPlan(selectedEvent.id);
