@@ -153,3 +153,7 @@ For a shared hosted website, only the backend developer needs these services. Ho
 ## Optional real Google Calendar source
 
 Follow [AIRBYTE.md](AIRBYTE.md) to install the Airbyte source, create a Google Desktop OAuth client, sign in and use real events in the local app. Erica should follow its WSL2 instructions and authorize her own Google account. Gmail stays on the roadmap; no email access is requested.
+
+## UpNext agent and admin (current entry points)
+
+The primary page at `/` is now the grouped Calendar → Amazon recommendation workspace. `/admin` shows conversations, traces and metrics. The original scenario picker and calendar sync controls moved to `/lab`. See [AGENT_AND_ADMIN.md](AGENT_AND_ADMIN.md) for local demo mode, optional live research, telemetry definitions, Statsig controls and proactive scheduling. The new agent defaults to saved preferences plus local SQLite; Cognee and SingleStore are opt-in controls there.

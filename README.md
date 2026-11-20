@@ -1,49 +1,40 @@
 # UpNext
 
-What you’ll need, before you need it. Repository name: `Tokensand-Project`.
+**What you’ll need, before you need it.** Repository: `Tokensand-Project`.
 
-# Tokensand-Project
+UpNext turns upcoming Google Calendar occasions into **Amazon shopping plans grouped by category**, with product links, relevance explanations, prices and ratings when available. Recipe ideas can accompany a plan. Every workflow has a persistent conversation and audit trail, and an admin observatory shows reliability, usage, latency, feedback and evidence coverage.
 
-A local web app and integration harness for a personal shopping agent with an audit trail. A synthetic calendar event becomes a shopping task after checking remembered preferences, ownership, price, size and delivery. The policy is deterministic today; real LLM planning, live calendars and retailer search are future work.
+## Run locally
 
-## Start here
-
-- [Mac and Windows local setup](docs/LOCAL_SETUP.md)
-- [Firedrill connection and remaining hosted setup](docs/FIREDRILL.md)
-- [Sponsor baseline and add-on roadmap](docs/SPONSOR_ROADMAP.md)
-
-After completing local setup:
+Follow [Mac/Windows setup](docs/LOCAL_SETUP.md), then:
 
 ```sh
+npm ci
 npm run app
 ```
 
-Open **http://localhost:8787** in Chrome, Safari or Edge. The app has a scenario picker, a saved-task result, rejected candidates, memory evidence, tool results and downloadable audit JSON. It does not require Codex. Windows development uses WSL2; a shared hosted backend is not deployed yet.
+- **App:** http://localhost:8787 — try **A Christmas party** in demo mode.
+- **Admin:** http://localhost:8787/admin — inspect conversations/traces, feedback, metrics and controls.
+- **Integration lab:** http://localhost:8787/lab — existing Cognee/SingleStore deterministic scenarios and Airbyte sync.
+
+Demo mode uses simulated Amazon-style products/prices/ratings, no LLM calls and no purchases. Live research is implemented through OpenAI Responses web search with Amazon-only domain filtering; it needs an API key and has not been live-tested in this local-first setup. Unknown prices/ratings remain unavailable. Sourced claims are not independently verified. No checkout or payment exists.
+
+## Setup guides
+
+- [Agent, admin, metrics and Amplitude/Statsig setup](docs/AGENT_AND_ADMIN.md)
+- [Google Calendar through Airbyte: OAuth and Erica's WSL instructions](docs/AIRBYTE.md)
+- [Local Cognee and SingleStore](docs/LOCAL_SETUP.md)
+- [Firedrill and remaining hosted configuration](docs/FIREDRILL.md)
+- [Sponsor roadmap](docs/SPONSOR_ROADMAP.md)
+
+The default agent uses saved preferences and a persistent local SQLite trace ledger so the app/admin work without sponsor credentials. Admin controls can enable Cognee recall and optional SingleStore trace mirroring. Amplitude and Statsig use real SDKs with offline transports/overrides by default; cloud delivery requires separate project keys. Proactive calendar checks are opt-in and run only while the server is running. Gmail and other retailers remain future integrations.
 
 ```sh
-npm run demo             # real local Cognee + SingleStore, synthetic external services
-npm run test:workflow    # isolated policy + HTTP/JSONL transport tests
-npm run telemetry:test  # real Amplitude/Statsig SDKs in offline modes
+npm run test:workflow    # offline policy, agent, calendar and HTTP tests
+npm run telemetry:test  # existing sponsor SDK smoke test
+npm run demo            # legacy Cognee + SingleStore fixture workflow
 ```
 
-## What is real versus simulated
+The browser app is in `web/`; its Python API is `tokensand/server.py`. The older root-level static prototype remains separate and is not deployed by these changes. No shared backend is hosted. This is a single-user local app, not a production multiuser service.
 
-Cognee memory and SingleStore persistence run locally. Amplitude uses a local file transport; Statsig evaluates offline overrides. Calendar events, products and task-service faults are synthetic. No order is placed or payment collected. Firedrill is connected and registered; cloud simulations still need hosted tools/world configuration and a reviewed credit estimate.
-
-The original storage-cart prototype remains in root `index.html`, `app.js`, and `engine.mjs`. The new standalone browser app is under `web/` with its Python API in `tokensand/server.py`. Only the new server connects to the local workflow. The previously deployed static site is not automatically updated by these backend changes.
-
-## Repo layout
-
-- `tokensand/`: policy, memory, persistence, tool adapters, server and JSONL bridge
-- `web/`: browser app
-- `fixtures/`: clearly labeled synthetic event, profile and product data
-- `tests/`: repeatable offline tests
-- `scripts/`: local environment generation, telemetry and Firedrill plan preparation
-- `compose.yaml`: loopback-only pinned SingleStore development container
-- `requirements.lock`, `package-lock.json`: pinned dependencies
-
-Keep `.env`, `.local`, virtual environments, models and generated Firedrill local plans out of Git. Each teammate maintains independent local state and signs in to services separately.
-
-### Google Calendar with Airbyte
-
-The app can now sync a Google Calendar through the official Airbyte Docker source and use a selected event in the shopping demo. Follow [the Mac/Windows setup and Google sign-in guide](docs/AIRBYTE.md). Start with `npm run calendar:install`, then `npm run calendar:connect` and `npm run calendar:sync`. Gmail remains a future integration. Product data and wardrobe preferences are still demo data; calendar authorization is per developer.
+Keep `.env`, `.local`, models and generated Firedrill plans out of Git. Each teammate has independent local state, anonymous analytics identity and service sign-ins. Erica can pull the repository without receiving anyone else's tokens or conversations.

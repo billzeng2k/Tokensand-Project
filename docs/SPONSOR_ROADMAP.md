@@ -57,3 +57,7 @@ Baseline is a responsive web app usable in Chrome on Mac and Windows. Local deve
 ## Update: Airbyte Calendar is now implemented
 
 The official Docker source powers manual Calendar sync and event selection in the app. See [AIRBYTE.md](AIRBYTE.md). Each developer must complete Google OAuth before live use. Gmail and other connectors, automatic triggers and recurring-event expansion remain future work.
+
+## Current scope: Calendar + Amazon, with agent observability
+
+The current agent targets Amazon.com only, using Google Calendar as its connector. Grouped product recommendations include relevance, prices and ratings when evidenced; recipe ideas are separate generated content. Amplitude/Statsig now instrument the new workflow lifecycle and explicit feedback, while the local admin retains full conversations/traces. Senso verification, additional shopping sites, Gmail, Arcee/Superlinked inference, identity verification and browser checkout remain deferred. See [AGENT_AND_ADMIN.md](AGENT_AND_ADMIN.md) for the actual shipped behavior and verification limits.

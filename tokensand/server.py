@@ -11,6 +11,7 @@ from .config import ROOT, LOCAL
 from .storage import Store, MemoryStore
 from .tools import FixtureTools, SCENARIOS
 from .workflow import run, telemetry
+from . import agent_api
 
 JOBS = {}
 LOCK = threading.Lock()
@@ -61,8 +62,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control','no-store')
         self.send_header('Content-Length',str(len(data)))
         self.end_headers(); self.wfile.write(data)
+    def valid_host(self):
+        return self.headers.get('Host') in {f'localhost:{self.server.server_port}', f'127.0.0.1:{self.server.server_port}'}
     def do_GET(self):
+        if not self.valid_host(): return self.send({'error':'host_rejected'},403)
         path=urlparse(self.path).path
+        if agent_api.get(self,path): return
         if path == '/api/calendar':
             from .calendar import view
             return self.send(view())
@@ -73,13 +78,13 @@ class Handler(BaseHTTPRequestHandler):
             job_id=path.rsplit('/',1)[-1]
             with LOCK: job=JOBS.get(job_id)
             return self.send(job or {'error':'not_found'},200 if job else 404)
-        files={'/':('index.html','text/html'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css')}
+        files={'/':('agent.html','text/html'),'/lab':('index.html','text/html'),'/admin':('admin.html','text/html'),'/agent.js':('agent.js','text/javascript'),'/admin.js':('admin.js','text/javascript'),'/console.css':('console.css','text/css'),'/app.js':('app.js','text/javascript'),'/style.css':('style.css','text/css')}
         if path not in files: return self.send({'error':'not_found'},404)
         filename, content_type=files[path]
         data=(ROOT / 'web' / filename).read_bytes()
         self.send_response(200); self.send_header('Content-Type',content_type); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
     def do_POST(self):
-        if self.path not in ('/api/runs', '/api/calendar/sync'): return self.send({'error':'not_found'},404)
+        if not self.valid_host(): return self.send({'error':'host_rejected'},403)
         origin=self.headers.get('Origin')
         allowed={f'http://localhost:{self.server.server_port}',f'http://127.0.0.1:{self.server.server_port}'}
         if origin and origin not in allowed: return self.send({'error':'origin_rejected'},403)
@@ -89,6 +94,8 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length < 10000: raise ValueError()
             body=json.loads(self.rfile.read(length))
             if not isinstance(body, dict): raise ValueError()
+            if agent_api.post(self,self.path,body): return
+            if self.path not in ('/api/runs','/api/calendar/sync'): return self.send({'error':'not_found'},404)
             if self.path == '/api/calendar/sync':
                 with LOCK:
                     if any(j['state']=='running' for j in JOBS.values()): return self.send({'error':'A run is already in progress.'},409)
@@ -112,7 +119,8 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(); parser.add_argument('--port',type=int,default=8787); args=parser.parse_args()
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
+    agent_api.startup()
     print(f'UpNext app: http://localhost:{args.port}',flush=True)
     try: server.serve_forever()
     except KeyboardInterrupt: pass
-    finally: server.server_close(); WORKER.shutdown()
+    finally: server.server_close(); agent_api.STOP.set(); WORKER.shutdown(); agent_api.POOL.shutdown()
