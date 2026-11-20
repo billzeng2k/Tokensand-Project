@@ -30,9 +30,11 @@ def token():
         except FileExistsError:pass
     return path.read_text().strip()
 
-def read(url,timeout=60):
+def read(url,timeout=180):
     if not valid_url(url):raise ValueError('invalid_amazon_url')
-    if time.monotonic()-LAST_SEEN>10:raise RuntimeError('amazon_companion_unavailable')
+    # Background tabs may poll only once a minute. Queue with a bounded wait
+    # instead of rejecting a connected-but-throttled companion.
+    if LAST_SEEN and time.monotonic()-LAST_SEEN>180:raise RuntimeError('amazon_companion_unavailable')
     jid=secrets.token_urlsafe(24);event=threading.Event()
     with LOCK:JOBS[jid]={'id':jid,'url':url,'event':event,'claimed':False,'result':None}
     try:

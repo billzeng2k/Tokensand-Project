@@ -8,7 +8,7 @@ def test_destination_allowlist(url):
     assert not bridge.valid_url(url)
 
 def test_disconnected_companion_fails_immediately(monkeypatch):
-    monkeypatch.setattr(bridge,'LAST_SEEN',0)
+    monkeypatch.setattr(bridge,'LAST_SEEN',time.monotonic()-200)
     with pytest.raises(RuntimeError,match='amazon_companion_unavailable'):bridge.read('https://www.amazon.com/s?k=carrier')
 
 def test_queue_returns_only_its_result_and_cleans_up(monkeypatch):

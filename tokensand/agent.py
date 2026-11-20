@@ -72,7 +72,7 @@ def span(run,kind,name,fn):
 def error_code(exc):
     if isinstance(exc,urllib.error.HTTPError):return f'provider_http_{exc.code}'
     if isinstance(exc,(TimeoutError,subprocess.TimeoutExpired)):return 'timeout'
-    return str(exc) if str(exc) in {'missing_openai_key','agent_disabled','web_disabled','proactive_disabled','sponsor_sdk_unavailable','incomplete_model_response','invalid_recommendation','no_web_evidence','calendar_event_unavailable','amazon_evidence_unavailable','amazon_companion_unavailable','amazon_companion_timeout','local_model_unavailable','unsafe_search_query'} else type(exc).__name__
+    return str(exc) if str(exc) in {'missing_openai_key','agent_disabled','web_disabled','proactive_disabled','sponsor_sdk_unavailable','incomplete_model_response','invalid_recommendation','no_web_evidence','calendar_event_unavailable','amazon_evidence_unavailable','amazon_companion_unavailable','amazon_companion_timeout','amazon_browser_timeout','local_model_unavailable','unsafe_search_query'} else type(exc).__name__
 
 
 def safe_url(url):
@@ -155,6 +155,10 @@ def validate_result(result,sources,budget,mode='live'):
             item={**item,'category':group['category'],'rating':rating,'review_count':reviews,'uncertainties':list(dict.fromkeys(item['uncertainties']+['Price, rating, stock and delivery must be rechecked on Amazon before buying.'])),'verification':'simulated' if mode=='demo' else 'source-linked; not independently verified'}
             if price is None:item['uncertainties'].append('Price could not be confirmed.')
             if rating is None:item['uncertainties'].append('Amazon rating unavailable.')
+            image=item.get('image_url')
+            parsed=urllib.parse.urlsplit(image) if isinstance(image,str) else None
+            if not parsed or parsed.scheme!='https' or parsed.netloc not in ('m.media-amazon.com','images-na.ssl-images-amazon.com'):
+                item.pop('image_url',None)
             products.append(item)
         if products and result['should_recommend']:
             groups.append({'category':group['category'],'reason':group['reason'],'items':products});accepted.extend(products)
@@ -245,7 +249,7 @@ def execute(run_id):
                     exchange={'name':name,'messages':messages}
                     run.setdefault('model_exchanges',[]).append(exchange)
                     result,usage=local_qwen.model_call(messages,schema,run['model'])
-                    exchange.update(output=result,usage=usage)
+                    exchange.update(output=json.loads(json.dumps(result)),usage=usage)
                     for field in ('input_tokens','output_tokens'):run['usage'][field]+=usage[field]
                     next(s for s in reversed(run['spans']) if s['kind']=='model').update(usage=usage,model=run['model'])
                     return result
@@ -253,7 +257,7 @@ def execute(run_id):
             try:
                 result,evidence=local_qwen.research(prompt,context,local_call,audit)
                 sources=[{'url':e['url'],'title':e['title']} for e in evidence]
-                run['research']={'sources':sources,'pages':evidence,'retrieval':('Chrome companion' if os.getenv('AMAZON_RETRIEVAL')=='browser' else 'direct Amazon HTTP')+'; local Qwen inference'}
+                run['research']={'sources':sources,'pages':evidence,'retrieval':({'browser':'Chrome companion','local-browser':'Local browser worker'}.get(os.getenv('AMAZON_RETRIEVAL'),'direct Amazon HTTP'))+'; local Qwen inference'}
             finally:
                 for item in audit:
                     run['spans'].append({'id':str(uuid.uuid4()),'kind':'web','name':'amazon.read','started_at':item['observed_at'],'duration_ms':item['duration_ms'],'status':'completed' if item['status']=='retrieved' else 'failed','evidence':item})
@@ -276,7 +280,7 @@ def execute(run_id):
         if run['result']['should_recommend']:run['task_id']=span(run,'action','review_task.save',lambda:ledger.save_task(run))
         run['status']='completed' if run['result']['should_recommend'] else 'no_action'
     except Exception as exc:
-        code=error_code(exc);run.update(status='blocked' if code in ('agent_disabled','web_disabled','proactive_disabled','missing_openai_key','calendar_event_unavailable','amazon_evidence_unavailable','amazon_companion_unavailable','amazon_companion_timeout','local_model_unavailable') else 'failed',error_code=code)
+        code=error_code(exc);run.update(status='blocked' if code in ('agent_disabled','web_disabled','proactive_disabled','missing_openai_key','calendar_event_unavailable','amazon_evidence_unavailable','amazon_companion_unavailable','amazon_companion_timeout','amazon_browser_timeout','local_model_unavailable') else 'failed',error_code=code)
         message={'amazon_evidence_unavailable':'Amazon could not provide readable product pages. No recommendations were generated. Try again later; no paid API or demo fallback was used.','amazon_companion_unavailable':'Open the UpNext Amazon companion in Chrome, then try again.', 'amazon_companion_timeout':'The Amazon companion timed out. Keep its tab open and try again.', 'local_model_unavailable':'The local Qwen model is unavailable. Start Ollama and download the configured model, then try again.'}.get(code,f'This run could not produce a recommendation ({code}). No purchase was made.')
         run['messages'].append({'role':'assistant','content':message,'at':ledger.now()})
     finally:

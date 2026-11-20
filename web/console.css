@@ -23,3 +23,7 @@ body.calendar-screen{height:100dvh;overflow:hidden}.calendar-screen .shell{heigh
 
 /* Event cards keep time, title and purchase count on separate lines. */
 .calendar-column header{margin-bottom:8px}.calendar-event{padding:9px 8px}.calendar-event>span,.calendar-event>b,.calendar-event>small{display:block;margin-right:0}.calendar-event>span{margin-bottom:4px}.calendar-event>b{line-height:1.4}.calendar-event .event-purchase-count{margin:7px 0 0;font-size:10px;line-height:1.5}.event-purchase-count.has-recommendations{color:#235c48;font-weight:650}.recommendation-light{display:inline-block;width:6px;height:6px;margin:0 6px 1px 2px;vertical-align:middle;border-radius:50%;background:#39825c;animation:recommendation-pulse 2.4s ease-out infinite}@keyframes recommendation-pulse{0%,100%{box-shadow:0 0 0 0 #39825c00}25%{box-shadow:0 0 0 1px #39825c45}75%{box-shadow:0 0 0 5px #39825c00}}@media(prefers-reduced-motion:reduce){.recommendation-light{animation:none;box-shadow:0 0 0 2px #39825c25}}
+
+.product-thumbnail{display:block;width:100%;height:180px;object-fit:contain;background:#fff;border-radius:12px;margin-bottom:16px;padding:12px;box-sizing:border-box}.product-variant{color:var(--muted,#667085);font-size:13px;margin:0 0 12px}
+
+#event-page .agent-grid{grid-template-columns:minmax(0,1fr)}

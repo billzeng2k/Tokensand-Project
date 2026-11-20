@@ -41,12 +41,16 @@ def read_amazon(url, audit):
         raise ValueError('Only public www.amazon.com HTTPS URLs are allowed')
     started=time.monotonic();record={'type':'amazon_read','status':'unavailable','url':url,'observed_at':datetime.now(timezone.utc).isoformat()};audit.append(record)
     try:
-        if os.getenv('AMAZON_RETRIEVAL')=='browser':
-            from .amazon_bridge import read
+        if os.getenv('AMAZON_RETRIEVAL') in ('browser','local-browser'):
+            if os.getenv('AMAZON_RETRIEVAL')=='local-browser':
+                from .local_browser import read
+            else:
+                from .amazon_bridge import read
             page=read(url)
-            record['transport']='chrome-companion'
+            record['transport']='local-browser' if os.getenv('AMAZON_RETRIEVAL')=='local-browser' else 'chrome-companion'
             if page and page.get('error'):
                 record['error']=str(page['error'])[:200];page=None
+            if page:record['image_url']=page.get('image_url')
             record['status']='retrieved' if page else 'blocked'
             return (' '.join(page['links'])+' ',page['text']) if page else None
         req=urllib.request.Request(url,headers={'User-Agent':'UpNext research prototype (read-only)'})
@@ -77,7 +81,7 @@ def research(prompt, context, call, audit):
             if asin in seen:continue
             per_query+=1
             seen.add(asin);url='https://www.amazon.com/dp/'+asin;page=read_amazon(url,audit)
-            if page:evidence.append({'url':url,'title':'Amazon product '+asin,'text':page[1][:7000]})
+            if page:evidence.append({'url':url,'title':'Amazon product '+asin,'text':page[1].split('Products related to this item')[0][:5000],'image_url':audit[-1].get('image_url') if audit else None})
             if len(seen)>=3 or per_query>=(2 if len(plan['queries'])>1 else 3):break
         if len(seen)>=3:break
     if not evidence:raise RuntimeError('amazon_evidence_unavailable')
@@ -86,9 +90,15 @@ def research(prompt, context, call, audit):
     # The model cannot introduce an unsupported numeric fact. Conservative substring
     # checks null out facts absent from the captured page; they are not verification.
     page_by_url={e['url']:e['text'] for e in evidence}
+    images={e['url']:e.get('image_url') for e in evidence}
     for group in result.get('groups',[]):
         for item in group.get('items',[]):
             text=page_by_url.get(item.get('source_url'),'')
+            item['image_url']=images.get(item.get('source_url'))
+            variant=re.search(r'(?:^|\n)Color:\s*([^\n]+)',text)
+            if variant:item['variant']=variant.group(1).strip()[:100]
+            primary=text.split('Color:')[0]
+            if 'Exclusive Prime price' in primary:item.setdefault('uncertainties',[]).append('Displayed price requires Amazon Prime.')
             price=item.get('price_cents');rating=item.get('rating');reviews=item.get('review_count')
             if type(price) is int and not re.search(r'\$\s*'+re.escape(f'{price/100:.2f}')+r'(?!\d)',text):item['price_cents']=None
             if type(rating) in (int,float) and not re.search(re.escape(str(float(rating)))+r'\s+out of\s+5',text,re.I):item['rating']=None

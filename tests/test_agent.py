@@ -216,4 +216,20 @@ def test_local_provider_success_saves_products_and_model_exchanges(monkeypatch):
     assert r['model_calls']==2 and len(r['model_exchanges'])==2
     assert r['usage']['input_tokens']==60 and r['cost_estimate_usd']==0
     assert len(r['research']['pages'])==1
-    assert ledger.get(r['id'])['model_exchanges'][1]['output']==result
+    assert ledger.get(r['id'])['model_exchanges'][1]['output']['groups'][0]['items'][0]['source_url']==url
+    assert 'image_url' not in ledger.get(r['id'])['model_exchanges'][1]['output']['groups'][0]['items'][0]
+
+
+@pytest.mark.parametrize('image',['javascript:alert(1)','https://evil.example/a.jpg','https://m.media-amazon.com.evil.example/a.jpg'])
+def test_product_thumbnail_rejects_untrusted_hosts(image):
+    result,sources=agent.demo_result('jacket',{},'evidence_first')
+    result['groups'][0]['items'][0]['image_url']=image
+    validated=agent.validate_result(result,sources,8000,'demo')
+    assert 'image_url' not in validated['items'][0]
+
+
+def test_product_thumbnail_keeps_amazon_image():
+    result,sources=agent.demo_result('jacket',{},'evidence_first')
+    image='https://m.media-amazon.com/images/I/test.jpg'
+    result['groups'][0]['items'][0]['image_url']=image
+    assert agent.validate_result(result,sources,8000,'demo')['items'][0]['image_url']==image
