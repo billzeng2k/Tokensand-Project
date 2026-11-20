@@ -153,13 +153,12 @@ def test_analytics_identity_stable_and_not_shared_constant():
     assert first!='upnext-local-user' and len(first)==36
 
 
-def test_christmas_plan_grouped_and_recipe_ideas():
+def test_christmas_plan_contains_only_grouped_products():
     r=run('Hosting a Christmas party with each item under $80')
     assert r['status']=='completed'
     assert [len(g['items']) for g in r['result']['groups']]==[2,3]
-    assert len(r['result']['recipes'])==2
+    assert r['result']['recipes']==[]
     assert all('rating' in i and 'review_count' in i for i in r['result']['items'])
-    assert all(x['type']=='generated_recipe_idea' for x in r['result']['recipes'])
 
 
 def test_live_rejects_non_amazon_and_search_pages_and_invalid_ratings():

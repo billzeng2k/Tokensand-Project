@@ -13,7 +13,8 @@ def state():
     with ledger.db() as c:
         decisions=[json.loads(r[0]) for r in c.execute('SELECT payload FROM item_decisions ORDER BY updated_at DESC')]
         notes=[dict(r) for r in c.execute('SELECT * FROM preference_notes ORDER BY created_at DESC')]
-    return {'decisions':decisions,'notes':notes}
+    from .thumbnails import images
+    return {'decisions':decisions,'notes':notes,'images':images()}
 
 def decide(run_id,url,action):
     if action not in ('purchased','dismissed','undo'):raise ValueError('Invalid item action')

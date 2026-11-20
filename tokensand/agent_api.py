@@ -148,6 +148,9 @@ def post(handler,path,body):
             if cid is not None and (not isinstance(cid,str) or len(cid)>50):raise ValueError('Invalid conversation')
             if event_id is not None and (not isinstance(event_id,str) or len(event_id)!=64):raise ValueError('Invalid calendar event')
             run=submit(prompt,mode,cid,event_id=event_id);handler.send({'id':run['id'],'conversation_id':run['conversation_id']},202)
+        elif path=='/api/agent/thumbnails':
+            from .thumbnails import refresh
+            refresh(body.get('event_id'));handler.send(shopping.state())
         elif path=='/api/agent/item-action':
             handler.send(shopping.decide(body.get('run_id'),body.get('source_url'),body.get('action')));tenancy.enqueue(POOL,agent.flush_events)
         elif path=='/api/agent/memory':
