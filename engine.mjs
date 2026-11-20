@@ -1,0 +1,6 @@
+export const products=[
+{id:'00586789',name:'RÅSKOG compact',price:29.99,w:11,d:15,h:24,material:'steel',url:'https://www.ikea.com/us/en/p/raskog-utility-cart-white-00586789/'},
+{id:'40582181',name:'RÅSKOG standard',price:39.99,w:13.75,d:17.75,h:30.375,material:'steel',url:'https://www.ikea.com/us/en/p/raskog-utility-cart-black-40582181/'},
+{id:'20399777',name:'NISSAFORS',price:29.99,w:19.875,d:11.75,h:32.625,material:'steel',url:'https://www.ikea.com/us/en/p/nissafors-utility-cart-black-20399777/'},
+{id:'00471222',name:'VESKEN',price:17.99,w:21.25,d:7.125,h:28,material:'plastic',url:'https://www.ikea.com/us/en/p/vesken-cart-white-00471222/'}];
+export function evaluate(c){return products.map(p=>{const total=Math.round((p.price*(1+c.tax/100)+c.fees)*100)/100;const normal=p.w+.5<=c.width&&p.d+.5<=c.depth;const rotated=p.d+.5<=c.width&&p.w+.5<=c.depth;const reasons=[];if(!normal&&!rotated)reasons.push('Footprint exceeds space + clearance');if(p.h+.5>c.height)reasons.push('Too tall with clearance');if(total>c.budget)reasons.push('Over total budget');if(c.material!=='any'&&p.material!==c.material)reasons.push('Material mismatch');return {...p,total,reasons,rotated:!normal&&rotated};}).sort((a,b)=>a.total-b.total||a.id.localeCompare(b.id));}
