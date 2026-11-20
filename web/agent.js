@@ -31,7 +31,7 @@ $('#agent-form').onsubmit=async e=>{
  }catch(e){fail(e);}finally{polling=false;$('#research').disabled=false;$('#conversation').disabled=false;$('#new-conversation').disabled=false;}
 };
 $('#preferences-form').onsubmit=async e=>{e.preventDefault();try{await api('/api/agent/preferences',{preferences:$('#personal-preferences').value,budget_cents:Math.round(Number($('#item-budget').value)*100)});$('#preferences-status').textContent='Saved. We’ll use these for your next recommendations.';}catch(e){fail(e);}};
-function setCalendarStatus(connected){const status=$('#account-calendar-status');status.textContent=connected?'Google Calendar connected':'Google Calendar not connected';status.classList.toggle('connected',connected);}
+function setCalendarStatus(connected){const status=$('#account-calendar-status');status.textContent=connected?'Connected':'Not connected';status.classList.toggle('connected',connected);$('#account-panel').classList.toggle('calendar-connected',connected);}
 async function refreshCalendar(){
  const cal=await api('/api/calendar');
  setCalendarStatus(cal.connected);
