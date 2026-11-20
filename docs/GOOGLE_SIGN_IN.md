@@ -1,5 +1,7 @@
 # Google sign-in and Calendar: Bill and Erica
 
+For Erica’s own Windows development credentials, start with [the Windows walkthrough](WINDOWS_GOOGLE_OAUTH.md).
+
 ## User experience
 
 Open http://localhost:8787, select **Sign in with Google**, then **Connect Google Calendar**. Approve read-only Calendar access using the **same Google account**, then select **Sync calendar**. Upcoming events appear in the occasion selector. Sign-in alone does not grant Calendar access. Users never provide API keys, download credential files, or open Airbyte's dashboard.
@@ -68,7 +70,7 @@ References: [Google server OAuth](https://developers.google.com/identity/protoco
 
 ## Calendar view and remembered sessions
 
-The signed-in shopper now has a month calendar and upcoming agenda, covering today through the next 365 days from the most recent Airbyte snapshot. Filter birthdays, holidays or other events, select a date, or choose **Plan for this event** to fill the shopping form. Repeating series are grouped in the agenda; the grid shows individual occurrences. The view includes only the connected **primary** calendar. Google holiday subscriptions and separate Birthdays calendars are not silently imported. Primary-calendar events marked `birthday` by Google are supported; other birthday/holiday labels use title keywords and are labeled as suggestions.
+The Calendar tab is a viewport-sized four-week view with an optional 7-day view. Click an event to open its recommendations and planning form; purchase history is a separate view. Each day shows its event count and recommended product count from the latest completed plan for each event. Sample products are counted separately, recipes are excluded, and events spanning multiple days appear on each day. No recommendations are invented for unresearched events. The view covers today through the next 365 days from the latest Airbyte snapshot and includes only the connected primary calendar; separate Google holiday and Birthdays calendars are not imported. Event type colors use Google's birthday type or title keyword suggestions.
 
 Recurrences are expanded locally with `python-dateutil`, preserving event timezone/DST, EXDATE exclusions, supplied moved/cancelled exceptions, and stable occurrence IDs. Sub-daily rules, malformed rules, excessive expansion and unsupported cases produce a visible warning rather than fabricated dates. The underlying Airbyte snapshot remains unchanged. The view respects all-day exclusive end dates and ongoing multi-day events.
 
@@ -77,3 +79,7 @@ Refresh and app-server restart preserve your seven-day UpNext session. The login
 A live Google sign-in, primary-calendar Airbyte sync, and refresh/server-restart session persistence were verified locally. Automated tests cover recurrence exceptions, yearly birthdays, DST, all-day dates and isolation. Amazon recommendations still use labeled previews until the backend model key is configured.
 
 Buy-by dates remain a follow-up feature. They should be editable planning deadlines tied to a specific occasion, using shipping/lead-time evidence and user preferences; they must not be represented as guaranteed delivery dates. The current **Plan for this event** action provides the event link for that future workflow.
+
+### Shopping-focused calendar
+
+The calendar hides routine and unrecognized event titles by default using a local keyword filter. Birthdays, holidays, parties, travel, dining and similar shopping occasions remain visible, as do events with saved live product recommendations. This is a display heuristic, not an LLM judgment or a claim that a purchase is necessary. **Show all events** restores the complete synced calendar; no source events or saved plans are deleted. Daily counts follow the visible events. Technical scope and counting notes live here rather than in the calendar UI.

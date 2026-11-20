@@ -1,36 +1,35 @@
-const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateOnly=value=>new Date(`${value}T12:00:00`);
 const dayKey=value=>`${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
-const labels={birthday:'Birthday',holiday:'Holiday',event:'Event'};
-let data=null,month=null,selectedDay=null,kind='all',limit=12,selectEvent;
+let data,anchor,selectEvent,mode='four-weeks',counts={},showAll=false;
+
+// A reversible title-based filter, not a claim that an event requires a purchase.
+export function isShoppingOccasion(event){
+ const title=String(event.title||'').toLowerCase();
+ if(/\b(sleep|bedtime|wake up|commute|focus time|standup|stand-up|daily sync)\b/.test(title)&&! /\b(party|birthday|wedding|trip|camping|gift|shopping)\b/.test(title))return false;
+ return event.kind==='birthday'||event.kind==='holiday'||/\b(birthday|bday|party|potluck|thanksgiving|christmas|halloween|hanukkah|diwali|eid|easter|holiday|wedding|anniversary|graduation|baby shower|bridal shower|housewarming|gift|shopping|groceries|flight|travel|trip|vacation|camping|hiking|picnic|barbecue|bbq|dinner|hosting|festival|concert|costume|moving|move-in|skiing|marathon|beach)\b/.test(title);
+}
 const root=()=>document.querySelector('#calendar-view');
-function visibleEvents(){return (data?.events||[]).filter(e=>kind==='all'||e.kind===kind);}
-function onDay(event,day){
- const end=event.end?.date||event.end?.dateTime?.slice(0,10)||event.date;
- return event.date<=day&&(event.end?.date?day<end:day<=end);
-}
-function dateLabel(event){
- const start=dateOnly(event.date).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
- if(event.all_day)return `${start} · All day`;
- return `${start} · ${event.start.dateTime?.slice(11,16)||''}${event.start.timeZone?' · '+event.start.timeZone:' · '+(event.start.dateTime?.slice(19)||'calendar time')}`;
-}
+function onDay(event,day){const end=event.end?.date||event.end?.dateTime?.slice(0,10)||event.date;return event.date<=day&&(event.end?.date?day<end:day<=end);}
 function draw(){
  if(!data||!root())return;
- const events=visibleEvents(),today=data.window_start,first=new Date(month.getFullYear(),month.getMonth(),1,12);
- const firstCell=new Date(first);firstCell.setDate(first.getDate()-first.getDay());
- const cells=Array.from({length:42},(_,i)=>{const date=new Date(firstCell);date.setDate(firstCell.getDate()+i);const key=dayKey(date),items=events.filter(e=>onDay(e,key));return `<button class="calendar-day ${date.getMonth()!==month.getMonth()?'outside':''} ${key===today?'today':''} ${key===selectedDay?'selected':''}" data-day="${key}" ${key<data.window_start||key>data.window_end?'disabled':''} aria-pressed="${key===selectedDay}" aria-label="${escapeHTML(date.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric',year:'numeric'}))}, ${items.length} events"><span>${date.getDate()}</span><span class="day-markers">${[...new Set(items.map(e=>e.kind))].map(k=>`<i class="marker ${k}" aria-hidden="true"></i>`).join('')}</span>${items.length?`<small>${items.length}</small>`:''}</button>`;}).join('');
- let agenda=selectedDay?events.filter(e=>onDay(e,selectedDay)):events;
- if(!selectedDay){const grouped=new Map();for(const event of agenda){const key=event.recurring?`${event.calendar_id}:${event.recurring_series_id||event.google_event_id}`:event.id;const prior=grouped.get(key);if(prior)prior._occurrences++;else grouped.set(key,{...event,_occurrences:1});}agenda=[...grouped.values()];}
- const previous=new Date(month.getFullYear(),month.getMonth(),0),next=new Date(month.getFullYear(),month.getMonth()+1,1);
- root().innerHTML=`<div class="panel-heading"><div><p class="eyebrow">YOUR YEAR AHEAD</p><h2>Your calendar</h2></div><span class="badge">${data.events.length} upcoming ${data.events.length===1?'event':'events'}</span></div><p class="hint calendar-scope">${escapeHTML(data.note)}</p><div class="calendar-filters" role="group" aria-label="Event types">${['all','birthday','holiday','event'].map(k=>`<button type="button" class="secondary ${kind===k?'chosen':''}" data-kind="${k}" aria-pressed="${kind===k}">${k==='all'?'All occasions':k==='birthday'?'Birthdays':k==='holiday'?'Holidays':'Other events'} <span>${k==='all'?data.events.length:data.events.filter(e=>e.kind===k).length}</span></button>`).join('')}</div><p class="hint">Birthday and holiday labels use Google’s event type or keywords in the title. Title-based labels are suggestions.</p>${data.warnings.map(w=>`<p class="notice">${escapeHTML(w)}</p>`).join('')}<div class="calendar-layout"><div><div class="calendar-toolbar"><h3>${month.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</h3><div><button class="secondary" id="calendar-prev" aria-label="Previous month" ${dayKey(previous)<today?'disabled':''}>Previous</button><button class="secondary" id="calendar-today">Today</button><button class="secondary" id="calendar-next" aria-label="Next month" ${dayKey(next)>data.window_end?'disabled':''}>Next</button></div></div><div class="calendar-weekdays" aria-hidden="true">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<span>${d}</span>`).join('')}</div><div class="calendar-days">${cells}</div><div class="calendar-legend"><span><i class="marker birthday"></i>Birthday</span><span><i class="marker holiday"></i>Holiday</span><span><i class="marker event"></i>Event</span></div></div><section class="calendar-agenda" aria-label="Upcoming events"><p class="hint">Repeating events are grouped below. Select a day to see its individual occurrences.</p><div class="panel-heading"><h3>${selectedDay?escapeHTML(dateOnly(selectedDay).toLocaleDateString(undefined,{month:'long',day:'numeric'})):'Upcoming occasions'}</h3>${selectedDay?'<button class="secondary" id="calendar-clear">Show all</button>':''}</div>${agenda.length?agenda.slice(0,limit).map(e=>`<article class="occasion ${e.kind}"><div class="occasion-meta"><span class="badge">${labels[e.kind]||'Event'}</span>${e.recurring?`<span>Repeats${e._occurrences>1?' · '+e._occurrences+' dates':''}</span>`:''}</div><h3>${escapeHTML(e.title)}</h3><p>${escapeHTML(dateLabel(e))}</p>${e.end?.date&&(dateOnly(e.end.date)-dateOnly(e.date))>90000000?`<p class="hint">Ends ${escapeHTML(dateOnly(dayKey(new Date(dateOnly(e.end.date).getTime()-86400000))).toLocaleDateString(undefined,{month:'short',day:'numeric'}))}</p>`:''}<p class="hint">${escapeHTML(e.kind_source)}</p><div class="occasion-actions"><button class="secondary" data-locate="${escapeHTML(e.id)}">Show date</button><button data-plan="${escapeHTML(e.id)}">Plan for this event</button></div></article>`).join(''):`<div class="empty"><h3>${data.connected?'No occasions here yet':'Connect your calendar'}</h3><p>${data.connected?(data.synced_at?'No matching events in this date range. Try another filter or sync your primary calendar.':'Select Sync calendar to load your events.'):'Sign in and connect Google Calendar to see your upcoming occasions.'}</p></div>`}${agenda.length>limit?'<button class="secondary" id="calendar-more">Show more events</button>':''}</section></div>`;
- root().querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{kind=b.dataset.kind;limit=12;draw();});
- root().querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{selectedDay=b.dataset.day;limit=12;draw();});
- root().querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>selectEvent(data.events.find(e=>e.id===b.dataset.plan)));
- root().querySelectorAll('[data-locate]').forEach(b=>b.onclick=()=>{const e=data.events.find(e=>e.id===b.dataset.locate);selectedDay=e.date<today?today:e.date;month=dateOnly(selectedDay);draw();});
- root().querySelector('#calendar-prev').onclick=()=>{month=new Date(month.getFullYear(),month.getMonth()-1,1,12);selectedDay=null;draw();};
- root().querySelector('#calendar-next').onclick=()=>{month=new Date(month.getFullYear(),month.getMonth()+1,1,12);selectedDay=null;draw();};
- root().querySelector('#calendar-today').onclick=()=>{month=dateOnly(today);selectedDay=null;draw();};
- const clear=root().querySelector('#calendar-clear');if(clear)clear.onclick=()=>{selectedDay=null;draw();};
- const more=root().querySelector('#calendar-more');if(more)more.onclick=()=>{limit+=12;draw();};
+ const first=new Date(anchor);
+ const visibleEvents=data.events.filter(e=>showAll||isShoppingOccasion(e)||(counts[e.id]?.live||0)>0);
+ const days=Array.from({length:mode==='four-weeks'?28:7},(_,i)=>{const d=new Date(first);d.setDate(d.getDate()+i);return d;});
+ root().innerHTML=`<div class="calendar-toolbar"><h2>${esc(first.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' – '+days.at(-1).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}))}</h2><div><button class="secondary" id="calendar-filter" aria-pressed="${showAll}">${showAll?'Show shopping occasions':'Show all events'}</button><button class="secondary" id="calendar-today">Today</button><button class="secondary" id="calendar-prev" aria-label="Previous ${mode}">‹</button><button class="secondary" id="calendar-next" aria-label="Next ${mode}">›</button><select id="calendar-mode" aria-label="Calendar view"><option value="week" ${mode==='week'?'selected':''}>7 days</option><option value="four-weeks" ${mode==='four-weeks'?'selected':''}>4 weeks</option></select></div></div><div class="calendar-board ${mode}">${days.map(d=>{
+ const key=dayKey(d),items=visibleEvents.filter(e=>onDay(e,key));
+ return `<section class="calendar-column ${key===data.window_start?'is-today':''} ${key<data.window_start||key>data.window_end?'out-of-range':''}" aria-label="${esc(d.toLocaleDateString(undefined,{dateStyle:'full'}))}"><header><span>${d.toLocaleDateString(undefined,{weekday:'short'})}</span><strong>${d.getDate()}</strong></header><div class="calendar-event-list" tabindex="0" aria-label="Events for ${key}">${items.map(e=>`<button class="calendar-event ${esc(e.kind)}" data-event="${esc(e.id)}"><span>${e.date<key?'Continues':e.all_day?'All day':esc(e.start?.dateTime?.slice(11,16)||'')}</span><b>${esc(e.title)}</b><small class="event-purchase-count ${(counts[e.id]?.live||0)>0?'has-recommendations':''}">${(counts[e.id]?.live||0)>0?'<i class="recommendation-light" aria-hidden="true"></i>':''}${counts[e.id]?.live||0} recommended purchases</small>${counts[e.id]?.demo?`<small class="sample-count">${counts[e.id].demo} sample options</small>`:''}</button>`).join('')}</div></section>`;
+ }).join('')}</div>${!data.events.length?`<p class="calendar-empty">${data.connected?'Sync your calendar using the Connected menu to load events.':'Connect Google Calendar using the card in the sidebar.'}</p>`:''}`;
+ root().querySelectorAll('[data-event]').forEach(b=>b.onclick=()=>selectEvent(data.events.find(e=>e.id===b.dataset.event)));
+ root().querySelector('#calendar-filter').onclick=()=>{showAll=!showAll;draw();};
+ root().querySelector('#calendar-mode').onchange=e=>{mode=e.target.value;draw();};
+ function move(n){anchor.setDate(anchor.getDate()+(mode==='week'?7:28)*n);if(dayKey(anchor)<data.window_start)anchor=dateOnly(data.window_start);draw();}
+ root().querySelector('#calendar-prev').onclick=()=>move(-1);
+ root().querySelector('#calendar-next').onclick=()=>move(1);
+ root().querySelector('#calendar-today').onclick=()=>{anchor=dateOnly(data.window_start);draw();};
+ const previous=new Date(anchor),next=new Date(anchor);previous.setDate(previous.getDate()-1);next.setDate(next.getDate()+(mode==='week'?7:28));
+ root().querySelector('#calendar-prev').disabled=dayKey(previous)<data.window_start;
+ root().querySelector('#calendar-next').disabled=dayKey(next)>data.window_end;
 }
-export function renderCalendar(calendar,onSelect){data={warnings:[],events:[],...calendar};selectEvent=onSelect;if(!month)month=dateOnly(data.window_start);draw();}
+export function renderCalendar(calendar,onSelect){data={warnings:[],events:[],...calendar};selectEvent=onSelect;if(!anchor)anchor=dateOnly(data.window_start);draw();}
+export function updateRecommendationCounts(value){counts=value;draw();}

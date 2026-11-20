@@ -27,6 +27,8 @@ The app now requires Google sign-in. Users connect Calendar inside UpNext; devel
 
 ## Setup guides
 
+- [Erica: Windows Google OAuth setup, step by step](docs/WINDOWS_GOOGLE_OAUTH.md)
+
 - [Agent, admin, metrics and Amplitude/Statsig setup](docs/AGENT_AND_ADMIN.md)
 - [Google Calendar through Airbyte: OAuth and Erica's WSL instructions](docs/AIRBYTE.md)
 - [Local Cognee and SingleStore](docs/LOCAL_SETUP.md)
