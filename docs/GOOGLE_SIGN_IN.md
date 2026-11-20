@@ -65,3 +65,15 @@ Automated verification: `npm run test:workflow`. OAuth exchanges and Google sign
 This change adds authentication and account isolation, but it does **not** deploy a public service. The Python HTTP server and admin listener still bind to loopback. Production deployment needs a supported application server/reverse proxy, trusted host/origin configuration, HTTPS, secrets management, backups/retention, abuse/rate controls, and Google's publication/verification requirements. Do not expose the existing admin listener publicly. Separate developer machines do not synchronize app data.
 
 References: [Google server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect), [Airbyte Calendar source](https://docs.airbyte.com/integrations/sources/google-calendar).
+
+## Calendar view and remembered sessions
+
+The signed-in shopper now has a month calendar and upcoming agenda, covering today through the next 365 days from the most recent Airbyte snapshot. Filter birthdays, holidays or other events, select a date, or choose **Plan for this event** to fill the shopping form. Repeating series are grouped in the agenda; the grid shows individual occurrences. The view includes only the connected **primary** calendar. Google holiday subscriptions and separate Birthdays calendars are not silently imported. Primary-calendar events marked `birthday` by Google are supported; other birthday/holiday labels use title keywords and are labeled as suggestions.
+
+Recurrences are expanded locally with `python-dateutil`, preserving event timezone/DST, EXDATE exclusions, supplied moved/cancelled exceptions, and stable occurrence IDs. Sub-daily rules, malformed rules, excessive expansion and unsupported cases produce a visible warning rather than fabricated dates. The underlying Airbyte snapshot remains unchanged. The view respects all-day exclusive end dates and ongoing multi-day events.
+
+Refresh and app-server restart preserve your seven-day UpNext session. The login cookie is HttpOnly, and its hashed session record is persisted in the local account database. Browser cookie clearing, expiration, explicit sign-out, or removing the local account database requires signing in again. Google Calendar consent is stored separately as an encrypted refresh token; Google's Testing-mode expiry may require reconnection even while UpNext remains signed in.
+
+A live Google sign-in, primary-calendar Airbyte sync, and refresh/server-restart session persistence were verified locally. Automated tests cover recurrence exceptions, yearly birthdays, DST, all-day dates and isolation. Amazon recommendations still use labeled previews until the backend model key is configured.
+
+Buy-by dates remain a follow-up feature. They should be editable planning deadlines tied to a specific occasion, using shipping/lead-time evidence and user preferences; they must not be represented as guaranteed delivery dates. The current **Plan for this event** action provides the event link for that future workflow.

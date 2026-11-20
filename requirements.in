@@ -5,3 +5,4 @@ pytest
 
 google-auth[requests]==2.62.2
 cryptography
+python-dateutil==2.9.0.post0

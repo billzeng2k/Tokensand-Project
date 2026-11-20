@@ -10,6 +10,7 @@ import tempfile
 import threading
 from .config import LOCAL
 from . import tenancy, auth
+from .calendar_events import expand, occurrence_key, event_kind, HORIZON_DAYS
 
 IMAGE = 'airbyte/source-google-calendar:1.1.0'
 CONFIG = LOCAL / 'airbyte-calendar.json'
@@ -91,11 +92,18 @@ def normalize(r, synced_at):
     day = start.get('date') or (start.get('dateTime') or '')[:10]
     if not day or r.get('recurrence') or r.get('status') == 'cancelled': return None
     date.fromisoformat(day)
-    identity = json.dumps([r['calendar_id'], r['id']], separators=(',', ':'))
+    identity_parts = [r['calendar_id'], r.get('recurringEventId') or r['id']]
+    if r.get('recurringEventId') and r.get('originalStartTime'):
+        identity_parts.append(occurrence_key(r['originalStartTime']))
+    identity = json.dumps(identity_parts, separators=(',', ':'))
+    kind, kind_source = event_kind(r)
     return {'id': hashlib.sha256(identity.encode()).hexdigest(), 'title': r.get('summary', '(Untitled event)'),
             'date': day, 'status': r.get('status', 'confirmed'), 'need': 'jacket',
             'source': 'airbyte-google-calendar', 'calendar_id': r['calendar_id'], 'google_event_id': r['id'],
-            'updated': r.get('updated'), 'start': start, 'synced_at': synced_at,
+            'updated': r.get('updated'), 'start': start, 'end': r.get('end'), 'synced_at': synced_at,
+            'kind':kind, 'kind_source':kind_source, 'all_day':'date' in start,
+            'recurring':bool(r.get('recurringEventId')), 'recurring_series_id':r.get('recurringEventId'),
+            'recurrence_source':'expanded locally from Google rule' if r.get('expanded_occurrence') else None,
             'shopping_context': 'User-selected jacket demo; category is not inferred from calendar text.'}
 
 
@@ -104,11 +112,16 @@ def view(snapshot=None, today=None):
         snapshot = json.loads(snapshot_path().read_text()) if snapshot_path().exists() else {'records': [], 'synced_at': None}
     today = today or date.today()
     events = []
-    for r in snapshot['records']:
+    records, warnings = expand(snapshot['records'], today)
+    for r in records:
         e = normalize(r, snapshot['synced_at'])
-        if e and today <= date.fromisoformat(e['date']) <= today + timedelta(days=90): events.append(e)
+        if e:
+            end = (r.get('end') or {}).get('date') or ((r.get('end') or {}).get('dateTime') or '')[:10] or e['date']
+            last_day = date.fromisoformat(end) - (timedelta(days=1) if (r.get('end') or {}).get('date') else timedelta())
+            if last_day >= today and date.fromisoformat(e['date']) <= today + timedelta(days=HORIZON_DAYS):events.append(e)
     return {'connected': connected(), 'synced_at': snapshot['synced_at'], 'events': sorted(events, key=lambda e: (e['date'], e['id'])),
-            'note': 'Next 90 days. Recurring series are excluded until occurrence expansion is implemented. Calendar dates retain their source timezone.'}
+            'window_start':today.isoformat(), 'window_end':(today+timedelta(days=HORIZON_DAYS)).isoformat(), 'warnings':warnings,
+            'note': 'Primary calendar only · next 365 days. Separate Google Birthdays and Holidays calendars are not connected. Event dates retain their source timezone; repeating events are expanded locally.'}
 
 
 def selected_event(event_id):

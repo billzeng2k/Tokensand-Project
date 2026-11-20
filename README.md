@@ -23,7 +23,7 @@ Preview mode uses simulated Amazon-style products/prices/ratings, no LLM calls a
 
 ## Google accounts and Calendar
 
-The app now requires Google sign-in. Users connect Calendar inside UpNext; developers configure one **Web application OAuth client** first. Follow [Google sign-in setup for Bill and Erica](docs/GOOGLE_SIGN_IN.md). Each account has separate preferences, calendars, conversations and traces. The old Desktop OAuth/CLI flow is retained only for the legacy integration lab.
+The app now requires Google sign-in. Users connect Calendar inside UpNext; developers configure one **Web application OAuth client** first. Follow [Google sign-in setup for Bill and Erica](docs/GOOGLE_SIGN_IN.md). Each account has separate preferences, calendars, conversations and traces. The calendar view shows a year of upcoming occasions, including recurring birthdays, with type filters and a shortcut to plan for an event. Sessions survive refresh and server restarts for seven days. The old Desktop OAuth/CLI flow is retained only for the legacy integration lab.
 
 ## Setup guides
 
