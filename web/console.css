@@ -79,3 +79,9 @@ body.calendar-screen{height:100dvh;overflow:hidden}.calendar-screen .shell{heigh
 .shopper-app .account-card #calendar-account-menu #account-title,.shopper-app .account-card #calendar-account-menu #account-note{display:block}
 .shopper-app .account-card #calendar-account-menu #logout:not([hidden]){display:block}
 .shopper-app #calendar-account-menu #account-title{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+
+.calendar-event.research-pending{background:#eaf3ff;border-left-color:#2563eb;color:#1e40af}
+.calendar-event .event-research-status{color:#1d4ed8;font-weight:650;margin-top:7px}
+.research-light{display:inline-block;width:6px;height:6px;border-radius:50%;background:#2563eb;margin-right:6px;animation:research-pulse 1.8s ease-out infinite}
+@keyframes research-pulse{0%,100%{box-shadow:0 0 0 0 #2563eb00}50%{box-shadow:0 0 0 4px #2563eb30}}
+@media(prefers-reduced-motion:reduce){.research-light{animation:none}}
