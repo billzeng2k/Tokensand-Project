@@ -1,89 +1,93 @@
 import {renderCalendar,updateRecommendationCounts} from '/calendar-view.js';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let current=null,polling=false,researchMode="demo",allRuns=[],selectedEvent=null;
-async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(r.status===401){$('#shopping-workspace').hidden=true;$('#google-login').hidden=false;$('#logout').hidden=true;$('#account-title').textContent='Your plans, connected';$('#account-note').textContent='Sign in to save your plans.';setCalendarStatus(false);current=null;render([]);}if(!r.ok)throw Error(d.error||'Request failed');return d;}
-function fail(e){$('#agent-error').textContent=e.message;$('#agent-error').hidden=false;}
-function sources(result){return (result?.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title||s.url)}</a>`).join('');}
+let drafts={};
+let allRuns=[],events=[],selectedEvent=null,current=null,researchMode='demo',shopping={decisions:[],notes:[]},authenticated=false,pollTimer=null,submitting=false;
+const pending=r=>['queued','running'].includes(r.status);
+const itemKey=url=>url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?#]|$)/i)?.[1].toUpperCase()||url;
+const eventRuns=id=>allRuns.filter(r=>r.event_id===id).sort((a,b)=>a.created_at.localeCompare(b.created_at)||a.id.localeCompare(b.id));
+async function api(path,body){const response=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const data=await response.json();if(response.status===401){authenticated=false;$('#shopping-workspace').hidden=true;$('#google-login').hidden=false;$('#connection-message').textContent='Sign in again to continue.';}if(!response.ok)throw Error(data.error||'Request failed');return data;}
+function fail(error){$('#agent-error').textContent=error.message;$('#agent-error').hidden=false;}
+function announce(text){$('#action-status').textContent=text;}
+function hiddenItem(item,eventId){const key=itemKey(item.source_url);return shopping.decisions.some(d=>d.item_key===key&&(d.action==='purchased'||d.event_id===eventId));}
+function combinedPlan(eventId){
+ const runs=eventRuns(eventId).filter(r=>r.result&&['completed','no_action'].includes(r.status));
+ const live=runs.filter(r=>r.mode==='live'),eligible=live.length?live:runs,items=new Map(),recipes=new Map();
+ for(const run of eligible){for(const group of run.result.groups||[]){for(const item of group.items){items.set(itemKey(item.source_url),{...item,_run_id:run.id,category:group.category,category_reason:group.reason});}}for(const recipe of run.result.recipes||[])recipes.set(recipe.name,recipe);}
+ const groups=new Map();for(const item of items.values()){if(hiddenItem(item,eventId))continue;if(!groups.has(item.category))groups.set(item.category,{category:item.category,reason:item.category_reason,items:[]});groups.get(item.category).items.push(item);}
+ return {mode:live.length?'live':'demo',result:{groups:[...groups.values()],recipes:[...recipes.values()]}};
+}
 function renderPlan(r){
  const groups=r.result?.groups||((r.result?.items||[]).length?[{category:'Shopping options',reason:'',items:r.result.items}]:[]);
- const products=groups.map(g=>`<section class="category"><div class="category-heading"><h3>${esc(g.category)}</h3><span class="badge">${g.items.length} ${g.items.length===1?'option':'alternatives'}</span></div><p class="hint">${esc(g.reason)}</p><div class="product-grid">${g.items.map(i=>`<article class="product"><span class="product-label">${r.mode==='demo'?'SAMPLE PRODUCT':'AMAZON.COM'}</span><h3>${esc(i.name)}</h3><div class="product-facts"><b>${i.price_cents===null?'Price unavailable':`$${(i.price_cents/100).toFixed(2)}`}</b><span>${i.rating==null?'Rating unavailable':`★ ${Number(i.rating).toFixed(1)} / 5`}<small>${i.review_count==null?'Review count unavailable':`${Number(i.review_count).toLocaleString()} reviews`}</small></span></div><p><b>Why it fits:</b> ${esc(i.reason)}</p><p class="hint">${i.uncertainties.map(esc).join(' ')}</p>${r.mode==='demo'?'<span class="demo-link">Sample item · not available to buy</span>':`<a class="buy-link" href="${esc(i.source_url)}" target="_blank" rel="noopener noreferrer">View item on Amazon</a>`}</article>`).join('')}</div></section>`).join('');
+ const products=groups.map(g=>`<section class="category"><div class="category-heading"><h3>${esc(g.category)}</h3><span class="badge">${g.items.length} ${g.items.length===1?'option':'alternatives'}</span></div><p class="hint">${esc(g.reason)}</p><div class="product-grid">${g.items.map(i=>`<article class="product">${i.image_url?`<img class="product-thumbnail" src="${esc(i.image_url)}" alt="${esc(i.name)}" loading="lazy" referrerpolicy="no-referrer">`:``}<span class="product-label">${r.mode==='demo'?'SAMPLE PRODUCT':'AMAZON.COM'}</span><h3>${esc(i.name)}</h3>${i.variant?`<p class="product-variant">${esc(i.variant)}</p>`:``}<div class="product-facts"><b>${i.price_cents===null?'Price unavailable':`$${(i.price_cents/100).toFixed(2)}`}</b><span>${i.rating==null?'Rating unavailable':`★ ${Number(i.rating).toFixed(1)} / 5`}<small>${i.review_count==null?'Review count unavailable':`${Number(i.review_count).toLocaleString()} reviews`}</small></span></div><p><b>Why it fits:</b> ${esc(i.reason)}</p><p class="hint">${i.uncertainties.map(esc).join(' ')}</p>${r.mode==='demo'?'<span class="demo-link">Sample item · not available to buy</span>':`<a class="buy-link" href="${esc(i.source_url)}" target="_blank" rel="noopener noreferrer">View item on Amazon</a>`}${r.mode==='live'?`<div class="item-actions"><button class="item-check" data-item-action="purchased" data-run="${esc(i._run_id||r.id)}" data-url="${esc(i.source_url)}" aria-label="Mark ${esc(i.name)} as purchased" title="Mark as purchased">✓ <span>Purchased</span></button><button class="item-dismiss" data-item-action="dismissed" data-run="${esc(i._run_id||r.id)}" data-url="${esc(i.source_url)}" aria-label="Don’t buy ${esc(i.name)}" title="Don’t buy this">× <span>Not for me</span></button></div>`:''}</article>`).join('')}</div></section>`).join('');
  const recipes=r.result?.recipes||[];
  return products+(recipes.length?`<section class="category"><div class="category-heading"><h3>Recipe ideas</h3><span class="badge">${recipes.length} ideas</span></div><p class="hint">Generated ideas. Prices and Amazon ratings apply only to linked ingredients, not recipes.</p><div class="product-grid">${recipes.map(recipe=>`<article class="product recipe"><span class="product-label">FOR THE TABLE</span><h3>${esc(recipe.name)}</h3><p>${esc(recipe.reason)}</p><details><summary>Ingredients & preparation</summary><ul>${recipe.ingredients.map(x=>`<li>${esc(x)}</li>`).join('')}</ul><ol>${recipe.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></details>${r.mode==='live'?(recipe.ingredient_links||[]).map(l=>`<a class="text-link" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)} on Amazon</a>`).join(''):''}<p class="hint">${esc(recipe.note)}</p></article>`).join('')}</div></section>`:'');
 }
-
-function render(runs){
- $('#conversation-messages').innerHTML=runs.length?runs.map(r=>`<div class="run-block">${r.messages.filter(m=>['user','assistant'].includes(m.role)).map(m=>`<div class="message ${esc(m.role)}"><span class="role">${m.role==='user'?'YOU':'UPNEXT'}${r.mode==='demo'&&m.role==='assistant'?' · SIMULATED':''}</span>${esc(m.content)}</div>`).join('')}${['queued','running'].includes(r.status)?'<p class="hint" role="status">Thinking through your occasion and comparing options…</p>':''}${renderPlan(r)}${r.result?`<details><summary>Evidence & missing information</summary><p class="hint">${r.result.missing_information.map(esc).join(' ')||'Check retailer details before buying.'}</p><div class="sources">${r.mode==='demo'?'<p class="hint">Demo sources are fictional and not purchase links.</p>':sources(r.result)}</div></details>`:''}${['completed','no_action'].includes(r.status)?(r.feedback?`<p class="hint">Feedback recorded: ${esc(r.feedback.value.replaceAll('_',' '))}.</p>`:`<div class="feedback"><button class="secondary" data-run="${esc(r.id)}" data-feedback="helpful">Helpful</button><button class="secondary" data-run="${esc(r.id)}" data-feedback="not_helpful">Not helpful</button><button class="secondary" data-run="${esc(r.id)}" data-feedback="dismissed">Dismiss</button></div>`):''}<div class="run-footer"><span>${esc(({completed:'Ready for your review',no_action:'You’re already covered',failed:'Couldn’t finish this plan',blocked:'Connection needed',interrupted:'Please try again',running:'Preparing your plan',queued:'Getting started'})[r.status]||r.status)}${r.mode==='demo'?' · Sample plan':''}</span><span>Saved to your plans</span></div></div>`).join(''):'<div class="empty"><h3>Start a new plan.</h3><p>Describe an occasion to see recommendations here.</p></div>';
- for(const b of document.querySelectorAll('[data-feedback]'))b.onclick=async()=>{b.disabled=true;try{await api('/api/agent/feedback',{run_id:b.dataset.run,value:b.dataset.feedback});await loadConversation();}catch(e){fail(e);b.disabled=false;}};
+function progress(run){const span=[...(run.spans||[])].reverse().find(s=>s.status==='running');if(span?.name.includes('recommendation'))return 'Writing your recommendations…';if(span?.name.includes('research.plan'))return 'Planning the Amazon search…';if(span?.name.includes('airbyte'))return 'Checking your calendar…';if((run.local_research_audit||[]).length)return 'Reading Amazon products…';return run.status==='queued'?'Your request is queued…':'Searching Amazon for your event…';}
+function renderChat(runs){
+ const panel=$('#event-chat-messages'),atBottom=panel.scrollHeight-panel.scrollTop-panel.clientHeight<80;
+ panel.innerHTML=runs.length?runs.map(r=>`${r.messages.filter(m=>['user','assistant'].includes(m.role)).map(m=>`<div class="chat-message ${esc(m.role)}"><span>${m.role==='user'?'You':'UpNext'}</span><p>${esc(m.content)}</p></div>`).join('')}${pending(r)?`<div class="chat-progress" role="status"><i></i>${esc(progress(r))}</div>`:''}`).join(''):'<div class="chat-welcome"><h3>What do you need for this event?</h3><p>Ask for ideas or something specific. New finds will be added to your recommendations.</p><button class="secondary" id="start-research">Find recommendations</button></div>';
+ if(atBottom)panel.scrollTop=panel.scrollHeight;
+ const start=$('#start-research');if(start)start.onclick=()=>{$('#message').value=`Suggest useful purchases for ${selectedEvent.title}. Consider what I already own.`;$('#agent-form').requestSubmit();};
+ $('#research').disabled=submitting||runs.some(pending);$('#research').textContent=runs.some(pending)?'Researching…':'Send';
 }
-async function refreshConversations(){const d=await api('/api/agent/conversations');$('#conversation').innerHTML='<option value="">Start a new plan</option>'+d.conversations.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');$('#conversation').value=current||'';$('#history-conversation').innerHTML='<option value="">Choose a saved plan</option>'+d.conversations.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');$('#history-conversation').value=current||'';
- const recent=await Promise.all(d.conversations.map(c=>api(`/api/agent/conversations/${c.id}`)));
- allRuns=recent.flatMap(x=>x.runs);updateEventRecommendations();
- const inbox=allRuns.filter(r=>r.trigger==='proactive').slice(-5).reverse();$('#inbox').innerHTML=inbox.length?inbox.map(r=>`<p><button class="secondary" data-open="${r.conversation_id}">${esc(r.result?.summary||r.status)}</button></p>`).join(''):'<p class="hint">No upcoming suggestions yet.</p>';
- for(const b of document.querySelectorAll('[data-open]'))b.onclick=()=>{current=b.dataset.open;$('#conversation').value=current;loadConversation().catch(fail);};
+function renderMemory(){
+ const purchased=shopping.decisions.filter(d=>d.action==='purchased');
+ $('#memory-list').innerHTML=`<p class="hint">${purchased.length} item${purchased.length===1?'':'s'} marked purchased. Dismissed items are skipped for this event only.</p>`+(shopping.notes.length?shopping.notes.map(n=>`<div class="memory-note"><span>${esc(n.text)}</span><button class="text-button" data-forget="${esc(n.id)}" aria-label="Forget ${esc(n.text)}">Forget</button></div>`).join(''):'<p class="hint">Check “Remember this” when you share a preference in chat.</p>');
 }
-async function loadConversation(){$('#history-conversation').value=current||'';if(!current){render([]);return [];}const d=await api(`/api/agent/conversations/${current}`);render(d.runs);allRuns=allRuns.filter(r=>r.conversation_id!==current).concat(d.runs);updateEventRecommendations();return d.runs;}
-$('#conversation').onchange=()=>{current=$('#conversation').value||null;loadConversation().catch(fail);};
-$('#history-conversation').onchange=()=>{current=$('#history-conversation').value||null;$('#conversation').value=current||'';loadConversation().catch(fail);};
-$('#new-conversation').onclick=()=>{if(polling)return;current=null;$('#conversation').value='';render([]);location.hash='calendar-view';$('#message').focus();};
-for(const b of document.querySelectorAll('[data-prompt]'))b.onclick=()=>{$('#message').value=b.dataset.prompt;$('#message').focus();};
-$('#agent-form').onsubmit=async e=>{
- e.preventDefault();if(polling)return;polling=true;$('#research').disabled=true;$('#conversation').disabled=true;$('#new-conversation').disabled=true;$('#agent-error').hidden=true;
- try{const d=await api('/api/agent/runs',{message:$('#message').value,mode:researchMode,conversation_id:current,event_id:$('#event').value||null});current=d.conversation_id;$('#message').value='';await refreshConversations();location.hash=selectedEvent?'event-details':'saved-plans';
- const started=Date.now();for(;;){const runs=await loadConversation();const run=runs.find(r=>r.id===d.id);if(run&&!['queued','running'].includes(run.status))break;if(Date.now()-started>600000)throw Error('This run is still pending. You can return to this plan later.');await new Promise(r=>setTimeout(r,1200));}
- }catch(e){fail(e);}finally{polling=false;$('#research').disabled=false;$('#conversation').disabled=false;$('#new-conversation').disabled=false;}
+function renderHistory(){
+ const rows=shopping.decisions.filter(d=>d.action==='purchased');
+ $('#purchased-items').innerHTML=rows.length?rows.map(d=>`<article class="purchase-row">${d.item.image_url?`<img src="${esc(d.item.image_url)}" alt="${esc(d.item.name)}" referrerpolicy="no-referrer">`:''}<div><h3>${esc(d.item.name)}</h3><p>${esc(d.item.variant||'')}</p><p class="hint">${esc(d.event_title)} · Marked purchased ${new Date(d.updated_at).toLocaleDateString()}</p><a href="${esc(d.item.source_url)}" target="_blank" rel="noopener noreferrer">View on Amazon</a><p class="hint">${d.item.price_cents==null?'Price unavailable':`Listed at $${(d.item.price_cents/100).toFixed(2)}`} · Marked by you, not a checkout receipt</p></div><button class="secondary" data-item-action="undo" data-run="${esc(d.run_id)}" data-url="${esc(d.item.source_url)}">Undo</button></article>`).join(''):'<div class="empty"><h3>No purchases yet</h3><p>Use the ✓ on a recommendation after you’ve purchased it.</p></div>';
+}
+function renderWorkspace(){
+ const counts={};for(const event of events){const plan=combinedPlan(event.id),count=plan.result.groups.reduce((n,g)=>n+g.items.length,0);counts[event.id]={live:plan.mode==='live'?count:0,demo:plan.mode==='demo'?count:0};}updateRecommendationCounts(counts);
+ renderMemory();renderHistory();
+ if(!selectedEvent)return;
+ const runs=eventRuns(selectedEvent.id),plan=combinedPlan(selectedEvent.id);
+ $('#event-recommendations').innerHTML=plan.result.groups.length||plan.result.recipes.length?renderPlan(plan):'<div class="empty"><h3>Make a plan for this event</h3><p>Your recommendations will appear here. Ask UpNext in the chat to get started.</p></div>';
+ const dismissed=shopping.decisions.filter(d=>d.action==='dismissed'&&d.event_id===selectedEvent.id);$('#dismissed-items').hidden=!dismissed.length;
+ $('#dismissed-list').innerHTML=dismissed.map(d=>`<div class="dismissed-row"><span>${esc(d.item.name)}</span><button class="text-button" data-item-action="undo" data-run="${esc(d.run_id)}" data-url="${esc(d.item.source_url)}">Restore</button></div>`).join('');
+ renderChat(runs);
+}
+function mergeRuns(runs){const map=new Map(allRuns.map(r=>[r.id,r]));for(const r of runs)map.set(r.id,r);allRuns=[...map.values()];}
+async function refreshRuns(){const d=await api('/api/agent/conversations');const conversations=await Promise.all(d.conversations.map(c=>api(`/api/agent/conversations/${c.id}`)));allRuns=conversations.flatMap(c=>c.runs);renderWorkspace();schedulePoll();}
+function schedulePoll(){if(pollTimer||!authenticated||!allRuns.some(pending))return;pollTimer=setTimeout(pollPending,1500);}
+async function pollPending(){pollTimer=null;if(!authenticated)return;try{const runs=await Promise.all(allRuns.filter(pending).map(r=>api(`/api/agent/runs/${r.id}`)));mergeRuns(runs);renderWorkspace();}catch(error){fail(new Error(`Could not refresh progress: ${error.message}. Retrying automatically.`));}finally{schedulePoll();}}
+$('#agent-form').onsubmit=async event=>{
+ event.preventDefault();if(submitting||!selectedEvent||eventRuns(selectedEvent.id).some(pending))return;
+ const message=$('#message').value.trim();if(!message)return;
+ const eventId=selectedEvent.id,conversationId=current;
+ submitting=true;$('#research').disabled=true;$('#agent-error').hidden=true;
+ try{
+  if($('#remember-message').checked){shopping=await api('/api/agent/memory',{text:message});$('#remember-message').checked=false;announce('Preference remembered.');}
+  const run=await api('/api/agent/runs',{message,mode:researchMode,conversation_id:conversationId,event_id:eventId});if(selectedEvent?.id===eventId){current=run.conversation_id;$('#message').value='';}drafts[eventId]='';mergeRuns([await api(`/api/agent/runs/${run.id}`)]);schedulePoll();
+ }catch(error){fail(error);}finally{submitting=false;renderWorkspace();}
 };
-$('#preferences-form').onsubmit=async e=>{e.preventDefault();try{await api('/api/agent/preferences',{preferences:$('#personal-preferences').value,budget_cents:Math.round(Number($('#item-budget').value)*100)});$('#preferences-status').textContent='Saved. We’ll use these for your next recommendations.';}catch(e){fail(e);}};
-function setCalendarStatus(connected){const status=$('#account-calendar-status');status.textContent=connected?'Connected':'Not connected';status.classList.toggle('connected',connected);$('#account-panel').classList.toggle('calendar-connected',connected);}
-async function refreshCalendar(){
- const cal=await api('/api/calendar');
- setCalendarStatus(cal.connected);
- renderCalendar(cal,openCalendarEvent);
- $('#connect-calendar').textContent=cal.connected?'Reconnect Google Calendar':'Connect Google Calendar';
- $('#sync-calendar').hidden=!cal.connected;$('#disconnect-calendar').hidden=!cal.connected;
- $('#event').innerHTML='<option value="">Choose an event, or tell us what’s coming up</option>'+cal.events.map(e=>`<option value="${esc(e.id)}">${esc(e.date)} · ${esc(e.title)}</option>`).join('');
- $('#calendar-note').textContent=cal.synced_at?`Last synced ${new Date(cal.synced_at).toLocaleString()}.`:cal.connected?'Calendar connected. Sync to load your upcoming events.':'Connect your calendar, or describe an occasion below.';
- return cal;
+document.addEventListener('click',async event=>{
+ const action=event.target.closest('[data-item-action]'),forget=event.target.closest('[data-forget]');if(!action&&!forget)return;
+ const button=action||forget;button.disabled=true;
+ try{shopping=await api(action?'/api/agent/item-action':'/api/agent/memory',action?{run_id:action.dataset.run,source_url:action.dataset.url,action:action.dataset.itemAction}:{action:'forget',id:forget.dataset.forget});renderWorkspace();announce(forget?'Preference forgotten.':action.dataset.itemAction==='purchased'?'Marked purchased. Saved to purchase history.':action.dataset.itemAction==='dismissed'?'Removed for this event. You can restore it below.':'Restored.');}catch(error){fail(error);button.disabled=false;}
+});
+function setCalendarStatus(connected){$('#account-calendar-status').textContent=connected?'Connected':'Not connected';$('#account-panel').classList.toggle('calendar-connected',connected);}
+async function refreshCalendar(){const cal=await api('/api/calendar');events=cal.events;setCalendarStatus(cal.connected);renderCalendar(cal,openCalendarEvent);$('#sync-calendar').hidden=!cal.connected;$('#disconnect-calendar').hidden=!cal.connected;$('#connect-calendar').textContent=cal.connected?'Reconnect Google Calendar':'Connect Google Calendar';route();return cal;}
+function openCalendarEvent(event){location.hash=`event-details/${event.id}`;route();}
+function route(){
+ const isHistory=location.hash==='#saved-plans',match=location.hash.match(/^#event-details\/([a-f0-9]{64})$/),detail=!!match;
+ const nextEvent=match?events.find(e=>e.id===match[1])||null:null;
+ if(selectedEvent?.id!==nextEvent?.id){if(selectedEvent)drafts[selectedEvent.id]=$('#message').value;$('#message').value=nextEvent?(drafts[nextEvent.id]||''):'';}
+ selectedEvent=nextEvent;
+ $('#calendar-page').hidden=isHistory||detail;$('#history-page').hidden=!isHistory;$('#event-page').hidden=!detail;$('.page-heading').hidden=true;document.body.classList.toggle('calendar-screen',!isHistory&&!detail);
+ $('.event-workspace').hidden=detail&&!selectedEvent;
+ if(detail){$('#event-title').textContent=selectedEvent?.title||'Event not found';$('#event-date').textContent=selectedEvent?`${selectedEvent.date} · ${selectedEvent.all_day?'All day':(selectedEvent.start?.dateTime?.slice(11,16)||'')+' '+(selectedEvent.start?.timeZone||'')}`:'This event is no longer in your synced calendar. Return to Calendar or sync again.';current=selectedEvent?eventRuns(selectedEvent.id).at(-1)?.conversation_id||null:null;}
+ for(const link of document.querySelectorAll('.sidebar .nav')){const active=link.hash===(isHistory?'#saved-plans':'#calendar-view');link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ renderWorkspace();schedulePoll();
 }
+window.addEventListener('hashchange',route);$('#back-calendar').onclick=()=>{location.hash='calendar-view';};
 const calendarMenu=$('#calendar-account-menu'),calendarToggle=$('#calendar-menu-toggle');
 function closeCalendarMenu(){calendarMenu.hidden=true;calendarToggle.setAttribute('aria-expanded','false');}
 calendarToggle.onclick=()=>{calendarMenu.hidden=!calendarMenu.hidden;calendarToggle.setAttribute('aria-expanded',String(!calendarMenu.hidden));};
-document.addEventListener('click',e=>{if(!$('#account-panel').contains(e.target))closeCalendarMenu();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!calendarMenu.hidden){closeCalendarMenu();calendarToggle.focus();}});
-$('#logout').onclick=async()=>{try{await api('/auth/logout',{});location.href='/';}catch(e){$('#connection-message').textContent=e.message;}};
-$('#sync-calendar').onclick=async()=>{const b=$('#sync-calendar');b.disabled=true;$('#sync-status').textContent='Syncing your upcoming events… This can take a few minutes.';try{await api('/api/calendar/sync',{});await refreshCalendar();$('#sync-status').textContent='Your calendar is up to date.';}catch(e){$('#sync-status').textContent=e.message;}finally{b.disabled=false;}};
-$('#disconnect-calendar').onclick=async()=>{try{await api('/api/calendar/disconnect',{});await refreshCalendar();$('#sync-status').textContent='Disconnected. Saved plans remain in your account. You can also revoke UpNext in your Google Account settings.';}catch(e){$('#sync-status').textContent=e.message;}};
-async function init(){
- const account=await api('/auth/me');
- if(!account.user){$('#shopping-workspace').hidden=true;$('#google-login').hidden=!account.configured;$('#account-note').textContent=account.configured?'Sign in to save your plans. You can connect Calendar afterward.':'Google sign-in is being set up by the app owner. Please check back soon.';return;}
- $('#account-title').textContent=`Welcome${account.user.name?', '+account.user.name:''}`;$('#account-note').textContent=account.user.email;$('#google-login').hidden=true;$('#logout').hidden=false;$('#shopping-workspace').hidden=false;
-
- const s=await api('/api/agent/status');researchMode=s.live_available?'live':'demo';$('#preview-notice').hidden=s.live_available;$('#item-budget').value=(s.settings.budget_cents/100).toFixed(2);$('#personal-preferences').value=s.settings.preferences;$('#profile-summary').textContent='A few details help us suggest things that suit you.';
- await refreshCalendar();
- await refreshConversations();
-}
-const connection=new URLSearchParams(location.search).get('connection');
-if(connection==='failed')$('#connection-message').textContent='Google connection wasn’t completed. Try again, use the same Google account, and approve the requested access.';
-if(connection==='calendar')$('#connection-message').textContent='Calendar connected. Select Sync calendar to load your events.';
-if(connection)history.replaceState(null,'','/');
-init().catch(e=>{$('#connection-message').textContent=e.message;});
-
-function updateNavigation(){
- const history=location.hash==='#saved-plans',detail=location.hash==='#event-details'&&!!selectedEvent;
- $('#calendar-page').hidden=history||detail;$('#history-page').hidden=!history;$('#event-page').hidden=!detail;document.querySelector('.page-heading').hidden=!history;document.body.classList.toggle('calendar-screen',!history&&!detail);
- document.querySelector('.page-heading h1').textContent=history?'Purchase history':'What’s up next?';
- for(const link of document.querySelectorAll('.sidebar .nav')){const active=link.hash===(history?'#saved-plans':'#calendar-view');link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
-}
-window.addEventListener('hashchange',updateNavigation);updateNavigation();
-
-function updateEventRecommendations(){
- const latest={};for(const run of [...allRuns].sort((a,b)=>a.created_at.localeCompare(b.created_at))){if(run.event_id&&['completed','no_action'].includes(run.status))latest[run.event_id]=run;}
- const counts={};for(const [id,run] of Object.entries(latest)){const n=(run.result?.groups||[{items:run.result?.items||[]}]).reduce((total,g)=>total+g.items.length,0);counts[id]={live:run.mode==='live'?n:0,demo:run.mode==='demo'?n:0};}updateRecommendationCounts(counts);
- if(selectedEvent){const runs=allRuns.filter(r=>r.event_id===selectedEvent.id),run=latest[selectedEvent.id],pending=runs.some(r=>['queued','running'].includes(r.status));$('#event-recommendations').innerHTML=pending?'<p class="notice" role="status">Researching recommendations for this event…</p>':run?`<h3>${run.mode==='demo'?'Sample recommendations':'Recommendations'}</h3><p>${esc(run.result?.summary||'Your plan is ready.')}</p>${renderPlan(run)}`:'<p class="notice">No recommendations yet. Use the details below to research this event.</p>';}
-}
-function openCalendarEvent(event){
- if(polling)return;selectedEvent=event;const runs=allRuns.filter(r=>r.event_id===event.id).sort((a,b)=>a.created_at.localeCompare(b.created_at));current=runs.at(-1)?.conversation_id||null;
- $('#event').value=event.id;$('#conversation').value=current||'';$('#event-title').textContent=event.title;$('#event-date').textContent=`${event.date} · ${event.all_day?'All day':(event.start?.dateTime?.slice(11,16)||'')+' '+(event.start?.timeZone||'')}`;
- $('#message').value=`Help me prepare for ${event.title} on ${event.date}. Recommend useful items only if needed, taking my preferences and existing belongings into account.`;
- updateEventRecommendations();location.hash='event-details';updateNavigation();
-}
-$('#back-calendar').onclick=()=>{location.hash='calendar-view';};
+document.addEventListener('click',event=>{if(!$('#account-panel').contains(event.target))closeCalendarMenu();});document.addEventListener('keydown',event=>{if(event.key==='Escape')closeCalendarMenu();});
+$('#logout').onclick=async()=>{try{await api('/auth/logout',{});location.href='/';}catch(error){fail(error);}};
+$('#sync-calendar').onclick=async()=>{const button=$('#sync-calendar');button.disabled=true;$('#sync-status').textContent='Syncing calendar…';try{await api('/api/calendar/sync',{});await refreshCalendar();$('#sync-status').textContent='Calendar synced.';}catch(error){$('#sync-status').textContent=error.message;}finally{button.disabled=false;}};
+$('#disconnect-calendar').onclick=async()=>{try{await api('/api/calendar/disconnect',{});await refreshCalendar();$('#sync-status').textContent='Disconnected. Your saved purchases remain.';}catch(error){fail(error);}};
+async function init(){const account=await api('/auth/me');if(!account.user){$('#google-login').hidden=!account.configured;$('#account-note').textContent='Sign in to save your plans and purchases.';return;}authenticated=true;$('#account-title').textContent=account.user.name;$('#account-note').textContent=account.user.email;$('#google-login').hidden=true;$('#logout').hidden=false;$('#shopping-workspace').hidden=false;const status=await api('/api/agent/status');researchMode=status.live_available?'live':'demo';$('#provider-note').textContent=status.provider==='ollama-local'?'Local Qwen':'UpNext';shopping=await api('/api/agent/shopping');await refreshCalendar();await refreshRuns();route();}
+init().catch(fail);

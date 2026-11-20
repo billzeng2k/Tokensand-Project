@@ -72,7 +72,7 @@ def span(run,kind,name,fn):
 def error_code(exc):
     if isinstance(exc,urllib.error.HTTPError):return f'provider_http_{exc.code}'
     if isinstance(exc,(TimeoutError,subprocess.TimeoutExpired)):return 'timeout'
-    return str(exc) if str(exc) in {'missing_openai_key','agent_disabled','web_disabled','proactive_disabled','sponsor_sdk_unavailable','incomplete_model_response','invalid_recommendation','no_web_evidence','calendar_event_unavailable'} else type(exc).__name__
+    return str(exc) if str(exc) in {'missing_openai_key','agent_disabled','web_disabled','proactive_disabled','sponsor_sdk_unavailable','incomplete_model_response','invalid_recommendation','no_web_evidence','calendar_event_unavailable','amazon_evidence_unavailable','amazon_companion_unavailable','amazon_companion_timeout','amazon_browser_timeout','local_model_unavailable','unsafe_search_query'} else type(exc).__name__
 
 
 def safe_url(url):
@@ -155,6 +155,10 @@ def validate_result(result,sources,budget,mode='live'):
             item={**item,'category':group['category'],'rating':rating,'review_count':reviews,'uncertainties':list(dict.fromkeys(item['uncertainties']+['Price, rating, stock and delivery must be rechecked on Amazon before buying.'])),'verification':'simulated' if mode=='demo' else 'source-linked; not independently verified'}
             if price is None:item['uncertainties'].append('Price could not be confirmed.')
             if rating is None:item['uncertainties'].append('Amazon rating unavailable.')
+            image=item.get('image_url')
+            parsed=urllib.parse.urlsplit(image) if isinstance(image,str) else None
+            if not parsed or parsed.scheme!='https' or parsed.netloc not in ('m.media-amazon.com','images-na.ssl-images-amazon.com'):
+                item.pop('image_url',None)
             products.append(item)
         if products and result['should_recommend']:
             groups.append({'category':group['category'],'reason':group['reason'],'items':products});accepted.extend(products)
@@ -225,7 +229,10 @@ def execute(run_id):
             event=span(run,'calendar','airbyte.refresh',lambda:selected_event(run['event_id']))
             if event['status']=='cancelled':raise RuntimeError('calendar_event_unavailable')
             context['event']={k:event.get(k) for k in ('id','title','date','source','synced_at','updated')}
-        context['prior_recommendations']=[r['result'] for r in ledger.conversation(run['conversation_id']) if r.get('result')][-3:]
+        from . import shopping
+        context['shopping_memory']=shopping.context(run.get('event_id'))
+        context['conversation_history']=[{'role':m['role'],'content':m['content'][:1500]} for r in prior if r['id']!=run_id for m in r['messages'] if m['role'] in ('user','assistant')][-8:]
+        context['prior_recommendations']=[{'name':i['name'],'source_url':i['source_url']} for r in prior if r.get('result') for i in r['result'].get('items',[])][-30:]
         run['context']=context
         previous=ledger.conversation(run['conversation_id'])
         history=[{'role':m['role'],'content':m['content']} for r in previous if r['id']!=run_id for m in r['messages'] if m['role'] in ('user','assistant')][-12:]
@@ -235,6 +242,28 @@ def execute(run_id):
             run['model']='simulated-no-llm';run['usage_measured']=False
             result,sources=span(run,'simulation','demo.recommendation',lambda:demo_result(prompt,context,flags['strategy']))
             if 'simulate failure' in prompt.lower():raise RuntimeError('simulated_provider_failure')
+        elif os.getenv('UPNEXT_LLM_PROVIDER')=='ollama':
+            from . import local_qwen
+            run['provider']='ollama-local';run['model']=os.getenv('OLLAMA_MODEL','qwen3:14b');run['usage_measured']=True
+            audit=run.setdefault('local_research_audit',[])
+            def local_call(messages,schema,name):
+                def request():
+                    run['model_calls']+=1
+                    exchange={'name':name,'messages':messages}
+                    run.setdefault('model_exchanges',[]).append(exchange)
+                    result,usage=local_qwen.model_call(messages,schema,run['model'])
+                    exchange.update(output=json.loads(json.dumps(result)),usage=usage)
+                    for field in ('input_tokens','output_tokens'):run['usage'][field]+=usage[field]
+                    next(s for s in reversed(run['spans']) if s['kind']=='model').update(usage=usage,model=run['model'])
+                    return result
+                return span(run,'model','ollama.'+name,request)
+            try:
+                result,evidence=local_qwen.research(prompt,context,local_call,audit)
+                sources=[{'url':e['url'],'title':e['title']} for e in evidence]
+                run['research']={'sources':sources,'pages':evidence,'retrieval':({'browser':'Chrome companion','local-browser':'Local browser worker'}.get(os.getenv('AMAZON_RETRIEVAL'),'direct Amazon HTTP'))+'; local Qwen inference'}
+            finally:
+                for item in audit:
+                    run['spans'].append({'id':str(uuid.uuid4()),'kind':'web','name':'amazon.read','started_at':item['observed_at'],'duration_ms':item['duration_ms'],'status':'completed' if item['status']=='retrieved' else 'failed','evidence':item})
         else:
             run['model']=os.getenv('OPENAI_MODEL','gpt-6.2-astra');run['usage_measured']=True
             instructions=SYSTEM+f"\nStrategy: {flags['strategy']}. "+('Prioritize lowest evidenced item price.' if flags['strategy']=='budget_first' else 'Prioritize clear retailer evidence and make missing facts prominent.')
@@ -254,8 +283,9 @@ def execute(run_id):
         if run['result']['should_recommend']:run['task_id']=span(run,'action','review_task.save',lambda:ledger.save_task(run))
         run['status']='completed' if run['result']['should_recommend'] else 'no_action'
     except Exception as exc:
-        code=error_code(exc);run.update(status='blocked' if code in ('agent_disabled','web_disabled','proactive_disabled','missing_openai_key','calendar_event_unavailable') else 'failed',error_code=code)
-        run['messages'].append({'role':'assistant','content':f'This run could not produce a recommendation ({code}). No purchase was made.','at':ledger.now()})
+        code=error_code(exc);run.update(status='blocked' if code in ('agent_disabled','web_disabled','proactive_disabled','missing_openai_key','calendar_event_unavailable','amazon_evidence_unavailable','amazon_companion_unavailable','amazon_companion_timeout','amazon_browser_timeout','local_model_unavailable') else 'failed',error_code=code)
+        message={'amazon_evidence_unavailable':'Amazon could not provide readable product pages. No recommendations were generated. Try again later; no paid API or demo fallback was used.','amazon_companion_unavailable':'Open the UpNext Amazon companion in Chrome, then try again.', 'amazon_companion_timeout':'The Amazon companion timed out. Keep its tab open and try again.', 'local_model_unavailable':'The local Qwen model is unavailable. Start Ollama and download the configured model, then try again.'}.get(code,f'This run could not produce a recommendation ({code}). No purchase was made.')
+        run['messages'].append({'role':'assistant','content':message,'at':ledger.now()})
     finally:
         run.update(finished_at=ledger.now(),latency_ms=round((time.monotonic()-start)*1000))
         if run['mode']=='live':
@@ -265,10 +295,11 @@ def execute(run_id):
                 if min(a,b,w)<0 or any(s['kind']=='model' and s['status']=='failed' for s in run['spans']):raise ValueError()
                 run['cost_estimate_usd']=(run['usage']['input_tokens']*a+run['usage']['output_tokens']*b)/1e6+sum(s['kind']=='web' for s in run['spans'])*w
             except (KeyError,ValueError):run['cost_estimate_usd']=None
+        if run.get('provider')=='ollama-local':run['cost_estimate_usd']=0;run['cost_note']='Local model/API spend only; excludes hardware and electricity.'
         ledger.save(run)
         for s in run['spans']:
             if s['kind']=='model':ledger.queue_event(run,'Agent Model Call Finished',{'latency_ms':s['duration_ms'],'span_kind':s['name'],'call_status':s['status'],'input_tokens':s.get('usage',{}).get('input_tokens'),'output_tokens':s.get('usage',{}).get('output_tokens'),'error_code':s.get('error_code')},f"{run_id}:{s['id']}")
-        ledger.queue_event(run,'Agent Workflow Finished',{'latency_ms':run['latency_ms'],**run['usage'],'model_calls':run['model_calls'],'source_count':len((run.get('result') or {}).get('sources',[])),'item_count':len((run.get('result') or {}).get('items',[])),'category_count':len((run.get('result') or {}).get('groups',[])),'recipe_count':len((run.get('result') or {}).get('recipes',[])),'missing_rating_count':sum(i.get('rating') is None for i in (run.get('result') or {}).get('items',[])),'missing_price_count':sum(i.get('price_cents') is None for i in (run.get('result') or {}).get('items',[])),'cost_estimate_usd':run['cost_estimate_usd']},f'{run_id}:finished')
+        ledger.queue_event(run,'Agent Workflow Finished',{'latency_ms':run['latency_ms'],**run['usage'],'model_calls':run['model_calls'],'retrieval_attempts':len(run.get('local_research_audit',[])),'retrieval_successes':sum(x.get('status')=='retrieved' for x in run.get('local_research_audit',[])),'source_count':len((run.get('result') or {}).get('sources',[])),'item_count':len((run.get('result') or {}).get('items',[])),'category_count':len((run.get('result') or {}).get('groups',[])),'recipe_count':len((run.get('result') or {}).get('recipes',[])),'missing_rating_count':sum(i.get('rating') is None for i in (run.get('result') or {}).get('items',[])),'missing_price_count':sum(i.get('price_cents') is None for i in (run.get('result') or {}).get('items',[])),'cost_estimate_usd':run['cost_estimate_usd']},f'{run_id}:finished')
         run['telemetry']=flush_events()
         # Keep feedback written during telemetry delivery from being overwritten.
         current=ledger.get(run_id);run['feedback']=current.get('feedback')

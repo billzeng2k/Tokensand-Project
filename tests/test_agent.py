@@ -13,6 +13,7 @@ def isolated(tmp_path,monkeypatch):
         return {'mode':'local-file-transport','count':len(payload['events'])}
     monkeypatch.setattr(agent,'sdk',sdk)
     monkeypatch.delenv('OPENAI_API_KEY',raising=False)
+    monkeypatch.setenv('UPNEXT_LLM_PROVIDER','openai')
 
 
 def run(prompt='Find a jacket for dinner',mode='demo',cid=None):return agent.execute(ledger.create_run(prompt,mode,cid)['id'])
@@ -173,3 +174,62 @@ def test_live_rejects_non_amazon_and_search_pages_and_invalid_ratings():
     assert agent.validate_result(result,sources,8000)['items'][0]['rating'] is None
     item['rating']=8
     assert not agent.validate_result(result,sources,8000)['items']
+
+
+def test_local_provider_uses_same_audit_and_never_openai(monkeypatch):
+    from tokensand import local_qwen
+    monkeypatch.setenv('UPNEXT_LLM_PROVIDER','ollama')
+    monkeypatch.setenv('OLLAMA_MODEL','qwen3:14b')
+    def local(messages,schema,model):
+        assert model=='qwen3:14b'
+        return {'queries':['food carrier']},{'input_tokens':30,'output_tokens':10}
+    monkeypatch.setattr(local_qwen,'model_call',local)
+    def blocked(url,audit):
+        audit.append({'type':'amazon_read','url':url,'observed_at':ledger.now(),'status':'unavailable','http_status':503,'duration_ms':5})
+        return None
+    monkeypatch.setattr(local_qwen,'read_amazon',blocked)
+    monkeypatch.setattr(agent,'model_call',lambda *a:pytest.fail('OpenAI must not run'))
+    r=run(mode='live')
+    assert r['status']=='blocked' and r['error_code']=='amazon_evidence_unavailable'
+    assert r['model_calls']==1 and r['usage']['input_tokens']==30
+    assert r['cost_estimate_usd']==0 and r['provider']=='ollama-local'
+    assert any(s['kind']=='web' and s['status']=='failed' for s in r['spans'])
+    assert agent_api.status()['live_available']
+
+
+def test_local_provider_success_saves_products_and_model_exchanges(monkeypatch):
+    from tokensand import local_qwen
+    monkeypatch.setenv('UPNEXT_LLM_PROVIDER','ollama')
+    result,_=agent.demo_result('jacket',{},'evidence_first')
+    url='https://www.amazon.com/dp/B000TEST01'
+    item=result['groups'][0]['items'][0];item['source_url']=url
+    responses=iter([{'queries':['cotton jacket']},result])
+    monkeypatch.setattr(local_qwen,'model_call',lambda *args:(next(responses),{'input_tokens':30,'output_tokens':10}))
+    def read(url,audit):
+        audit.append({'url':url,'observed_at':ledger.now(),'status':'retrieved','duration_ms':1})
+        return ('/dp/B000TEST01/','Cotton jacket $59.00 4.4 out of 5 stars 267 ratings')
+    monkeypatch.setattr(local_qwen,'read_amazon',read)
+    monkeypatch.setattr(agent,'model_call',lambda *a:pytest.fail('Paid fallback forbidden'))
+    r=run(mode='live')
+    assert r['status']=='completed' and r['task_id']
+    assert r['result']['items'][0]['source_url']==url
+    assert r['model_calls']==2 and len(r['model_exchanges'])==2
+    assert r['usage']['input_tokens']==60 and r['cost_estimate_usd']==0
+    assert len(r['research']['pages'])==1
+    assert ledger.get(r['id'])['model_exchanges'][1]['output']['groups'][0]['items'][0]['source_url']==url
+    assert 'image_url' not in ledger.get(r['id'])['model_exchanges'][1]['output']['groups'][0]['items'][0]
+
+
+@pytest.mark.parametrize('image',['javascript:alert(1)','https://evil.example/a.jpg','https://m.media-amazon.com.evil.example/a.jpg'])
+def test_product_thumbnail_rejects_untrusted_hosts(image):
+    result,sources=agent.demo_result('jacket',{},'evidence_first')
+    result['groups'][0]['items'][0]['image_url']=image
+    validated=agent.validate_result(result,sources,8000,'demo')
+    assert 'image_url' not in validated['items'][0]
+
+
+def test_product_thumbnail_keeps_amazon_image():
+    result,sources=agent.demo_result('jacket',{},'evidence_first')
+    image='https://m.media-amazon.com/images/I/test.jpg'
+    result['groups'][0]['items'][0]['image_url']=image
+    assert agent.validate_result(result,sources,8000,'demo')['items'][0]['image_url']==image

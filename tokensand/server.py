@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import uuid
@@ -59,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
     def end_headers(self):
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Referrer-Policy','no-referrer')
-        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://m.media-amazon.com https://images-na.ssl-images-amazon.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         super().end_headers()
     def send(self, value, status=200):
         data=json.dumps(value).encode()
@@ -180,9 +181,15 @@ if __name__ == '__main__':
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
     admin=ThreadingHTTPServer(('127.0.0.1',args.admin_port),AdminHandler)
     threading.Thread(target=admin.serve_forever,daemon=True).start()
+    if os.getenv('AMAZON_RETRIEVAL')=='browser':
+        from .amazon_bridge import start
+        start()
     agent_api.startup()
     print(f'UpNext app: http://localhost:{args.port}',flush=True)
     print(f'Private admin: http://localhost:{args.admin_port} (run npm run admin:token for your local sign-in token)',flush=True)
     try:server.serve_forever()
     except KeyboardInterrupt:pass
-    finally:server.server_close();admin.shutdown();admin.server_close();agent_api.STOP.set();WORKER.shutdown();agent_api.POOL.shutdown()
+    finally:
+        from .local_browser import stop
+        stop()
+        server.server_close();admin.shutdown();admin.server_close();agent_api.STOP.set();WORKER.shutdown();agent_api.POOL.shutdown()

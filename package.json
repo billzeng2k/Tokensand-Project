@@ -16,7 +16,10 @@
     "calendar:sync": ".venv/bin/python -m tokensand.calendar sync",
     "calendar:status": ".venv/bin/python -m tokensand.calendar status",
     "calendar:install": "docker pull --platform linux/amd64 airbyte/source-google-calendar:1.1.0",
-    "admin:token": ".venv/bin/python scripts/admin_token.py"
+    "admin:token": ".venv/bin/python scripts/admin_token.py",
+    "qwen:test": ".venv/bin/python scripts/try_local_qwen.py",
+    "amazon:setup": ".venv/bin/python scripts/setup_amazon_companion.py",
+    "amazon:install": ".venv/bin/python -m playwright install chromium"
   },
   "dependencies": {
     "@amplitude/analytics-node": "1.5.85",

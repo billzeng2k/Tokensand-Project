@@ -19,13 +19,16 @@ npm run app
 
 The main app contains only shopping, events, saved plans and personal preferences. Admin is separate and token-protected: run `npm run admin:token` to sign in on port 8788.
 
-Preview mode uses simulated Amazon-style products/prices/ratings, no LLM calls and no purchases. Live research is implemented through OpenAI Responses web search with Amazon-only domain filtering; it needs an API key and has not been live-tested in this local-first setup. Unknown prices/ratings remain unavailable. Sourced claims are not independently verified. No checkout or payment exists.
+Preview mode uses simulated Amazon-style products/prices/ratings, no LLM calls and no purchases. Live research supports local Qwen3 through Ollama with a local Amazon browser worker, or OpenAI Responses web search with an API key. The local provider makes no paid API calls; see the local setup guide. Unknown prices/ratings remain unavailable. Sourced claims are not independently verified. No checkout or payment exists.
 
 ## Google accounts and Calendar
 
 The app now requires Google sign-in. Users connect Calendar inside UpNext; developers configure one **Web application OAuth client** first. Follow [Google sign-in setup for Bill and Erica](docs/GOOGLE_SIGN_IN.md). Each account has separate preferences, calendars, conversations and traces. The calendar view shows a year of upcoming occasions, including recurring birthdays, with type filters and a shortcut to plan for an event. Sessions survive refresh and server restarts for seven days. The old Desktop OAuth/CLI flow is retained only for the legacy integration lab.
 
 ## Setup guides
+
+- [Local Qwen and Amazon setup](docs/LOCAL_QWEN.md)
+- [Event chat, purchase history and memory setup](docs/EVENT_CHAT.md)
 
 - [Erica: Windows Google OAuth setup, step by step](docs/WINDOWS_GOOGLE_OAUTH.md)
 
