@@ -33,8 +33,9 @@ def admin_allowed(handler):
 
 
 def status():
-    return {'provider':'openai-responses-web-search','live_available':bool(os.getenv('OPENAI_API_KEY')),
-            'model':os.getenv('OPENAI_MODEL','gpt-6.2-astra'),'amplitude_mode':os.getenv('AMPLITUDE_MODE','local'),
+    local=os.getenv('UPNEXT_LLM_PROVIDER')=='ollama'
+    return {'provider':'ollama-local' if local else 'openai-responses-web-search','live_available':local or bool(os.getenv('OPENAI_API_KEY')),
+            'model':os.getenv('OLLAMA_MODEL','qwen3:14b') if local else os.getenv('OPENAI_MODEL','gpt-6.2-astra'),'amplitude_mode':os.getenv('AMPLITUDE_MODE','local'),
             'statsig_mode':os.getenv('STATSIG_MODE','local'),'admin_auth_configured':bool(os.getenv('UPNEXT_ADMIN_TOKEN')),
             'storage':'local SQLite trace ledger','settings':{k:v for k,v in ledger.settings().items() if k in ('agent_enabled','web_enabled','proactive_enabled','proactive_mode','budget_cents','memory_backend','preferences')}}
 

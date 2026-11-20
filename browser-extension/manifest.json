@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "UpNext Amazon Companion",
+  "version": "0.1.0",
+  "description": "Read Amazon product pages for your local UpNext shopping agent. No purchases.",
+  "permissions": ["scripting"],
+  "host_permissions": ["https://www.amazon.com/*", "http://127.0.0.1:8789/*"],
+  "action": {"default_title": "Open UpNext companion"},
+  "background": {"service_worker": "background.js"}
+}

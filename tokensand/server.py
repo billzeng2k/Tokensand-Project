@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import uuid
@@ -180,6 +181,9 @@ if __name__ == '__main__':
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
     admin=ThreadingHTTPServer(('127.0.0.1',args.admin_port),AdminHandler)
     threading.Thread(target=admin.serve_forever,daemon=True).start()
+    if os.getenv('AMAZON_RETRIEVAL')=='browser':
+        from .amazon_bridge import start
+        start()
     agent_api.startup()
     print(f'UpNext app: http://localhost:{args.port}',flush=True)
     print(f'Private admin: http://localhost:{args.admin_port} (run npm run admin:token for your local sign-in token)',flush=True)

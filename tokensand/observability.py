@@ -133,7 +133,7 @@ def queue_event(run,event_type,properties=None,event_id=None):
     props={k:run.get(k) for k in ['conversation_id','mode','trigger','status','prompt_version','model']}
     props.update({'run_id':run['id'],'strategy':run.get('flags',{}).get('strategy'),'schema_version':1})
     props.update(properties or {})
-    allowed={'conversation_id','mode','trigger','status','prompt_version','model','run_id','strategy','schema_version','latency_ms','input_tokens','output_tokens','model_calls','source_count','item_count','cost_estimate_usd','feedback','span_kind','call_status','error_code','category_count','recipe_count','missing_rating_count','missing_price_count'}
+    allowed={'conversation_id','mode','trigger','status','prompt_version','model','run_id','strategy','schema_version','latency_ms','input_tokens','output_tokens','model_calls','source_count','item_count','cost_estimate_usd','feedback','span_kind','call_status','error_code','category_count','recipe_count','missing_rating_count','missing_price_count','retrieval_attempts','retrieval_successes'}
     payload={'event_type':event_type,'user_id':analytics_id(),'insert_id':event_id or str(uuid.uuid4()),'time':int(datetime.now(timezone.utc).timestamp()*1000),'event_properties':{k:v for k,v in props.items() if k in allowed and v is not None}}
     with db() as c:c.execute('INSERT OR IGNORE INTO outbox(id,run_id,payload) VALUES(?,?,?)',(payload['insert_id'],run['id'],json.dumps(payload)))
 

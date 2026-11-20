@@ -1,46 +1,57 @@
-# Local Qwen / Amazon experiment
+# Local Qwen and Amazon
 
-This is a bounded command-line experiment, not yet the shopper app's provider. It calls Qwen3 4B through local Ollama, asks for up to two generic product searches, and reads at most three Amazon product pages. It uses no cloud inference or paid search APIs. Amazon can reject both browser and HTTP access; a local model cannot resolve that restriction. Blocked retrieval must never turn into invented products, prices or ratings.
+UpNext supports Qwen3 through local Ollama for both search planning and recommendation explanations. No OpenAI key, paid search API, or cloud fallback is used in this mode. Calendar context stays in the local model; only generic product queries go to Amazon. The normal app saves recommendations, source excerpts, retrieval timestamps, model timings and token counts in the signed-in user's audit history. Amplitude and Statsig reuse the existing local telemetry/gating pipeline; their cloud dashboards still require separate configuration.
 
-## Mac
+## Start Ollama (Mac)
 
-Install Ollama from its official distribution or Homebrew (`brew install ollama`). From the repository root, start a local-only server in one terminal:
+Install Ollama from its official distribution or Homebrew (`brew install ollama`). From the repository root, keep this terminal running:
 
 ```sh
 OLLAMA_MODELS="$PWD/.local/ollama-models" OLLAMA_HOST=127.0.0.1:11434 OLLAMA_NO_CLOUD=1 ollama serve
 ```
 
-In another terminal:
+In a second terminal:
 
 ```sh
-ollama pull qwen3:4b
-npm run qwen:test
+ollama pull qwen3:14b
+npm run amazon:setup
 ```
 
-For the larger 14B model, run `ollama pull qwen3:14b`, then `npm run qwen:test -- --model qwen3:14b`. The 14B download is about 9.3 GB.
+14B downloads about 9.3 GB and requires additional inference memory. For a smaller machine, use `qwen3:4b` (about 2.5 GB). Both are installed on Bill's Mac. Do not expose Ollama or UpNext's servers publicly.
 
-The 4B model download is about 2.5 GB; inference needs additional memory. Keep this server running for the test. It is not configured to start automatically at login. If Ollama is already listening on port 11434, use that server only after verifying it is local and has cloud inference disabled.
+Set these values in your own ignored `.env`:
+
+```dotenv
+UPNEXT_LLM_PROVIDER=ollama
+OLLAMA_MODEL=qwen3:14b
+AMAZON_RETRIEVAL=browser
+```
+
+Restart `npm run app` after changing environment settings.
+
+## Chrome companion
+
+Direct Amazon HTTP search returned 503 during testing, while ordinary browser search worked. The companion uses Chrome to read Amazon search/product pages. It opens temporary foreground tabs and closes only those it created. It never adds to cart or checks out, and stops on robot checks rather than attempting to solve them.
+
+1. Run `npm run amazon:setup`. It prints the absolute path to `.local/amazon-extension`.
+2. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select that folder.
+3. Click **UpNext Amazon Companion** in Chrome's extensions menu. Keep its tab open. It should say **Connected** while `npm run app` runs.
+4. In UpNext, open the calendar event and request recommendations. Qwen plans up to two searches, reads up to three Amazon products, then groups recommendations and explains their relevance.
+
+Only `www.amazon.com` and the local bridge at `127.0.0.1:8789` are allowed. The generated extension contains a random local pairing token. Do not commit/share the generated directory, token file, or `.env`. Each teammate generates their own copy. After pulling extension code changes, run setup again and click Reload in `chrome://extensions`. Pause the companion or close its tab to stop accepting work. This is a development companion, not a published Chrome Web Store extension.
+
+Amazon pages may still be unavailable, incomplete, or blocked. The app reports that honestly and never substitutes demo products. Missing price/rating/review count stays unknown. Prices are observations, not guaranteed checkout prices. The companion is trusted local software and can submit page evidence; it is not a cryptographic proof of Amazon content. Never load a modified companion from an untrusted source.
 
 ## Erica: Windows
 
-The existing project scripts run in WSL Ubuntu. Install the official Linux Ollama distribution inside WSL (see [Ollama Linux setup](https://docs.ollama.com/linux)), then use the same server and test commands above from the WSL checkout. Hardware acceleration and speed depend on her Windows GPU/WSL configuration; this path has not been tested on her machine. Do not expose Ollama on a public interface. Do not copy Bill's model cache, credentials or environment file; download the model on her machine.
+Use the project's WSL Ubuntu setup. Install Ollama inside WSL using the [official Linux instructions](https://docs.ollama.com/linux), then run the same commands above in the WSL checkout. Choose 4B if 14B exceeds available RAM/VRAM. Acceleration depends on her GPU/WSL configuration.
 
-## Result and audit
+Load the generated extension in **Windows Chrome** using File Explorer's WSL network path, for example `\\wsl.localhost\Ubuntu\home\erica\Tokensand-Project\.local\amazon-extension` (adjust distro and checkout path). Keep the companion tab open. Windows Chrome must be able to reach WSL's forwarded `127.0.0.1:8789`; if it cannot, check WSL localhost forwarding and local firewall settings. Do not bind the service to all interfaces as a workaround. This Windows path still needs verification on Erica's machine.
 
-The private result is `.local/qwen-potluck-test.json`. It contains query-planning output, retrieval URLs/statuses, timestamps, local token counts, model duration, validated recommendations, and source excerpts when pages are readable. Hidden reasoning is not saved. The default occasion is Thanksgiving potluck; override with `npm run qwen:test -- --event 'Birthday picnic'`.
+Google OAuth setup is separate; follow the repo's Google Calendar instructions and create your own credentials. Gmail remains a future integration.
 
-`blocked_by_amazon` means no eligible product evidence was obtained. A successful model response alone is not a successful shopping task. No checkout occurs. Model API spend is zero; local hardware, electricity and internet are not priced in that figure. The app remains on its existing provider until this experiment proves useful; no OpenAI key or credits are used by this script.
+## CLI and failure tests
 
-## Sponsor additions that fit
+`npm run qwen:test -- --model qwen3:14b` tests local inference and writes `.local/qwen-potluck-14b.json`. The standalone CLI always uses direct HTTP retrieval; browser retrieval requires the in-process app queue, so use the app for browser runs. `blocked_by_amazon` is a failed retrieval, not successful recommendations.
 
-- **Firedrill:** replay Amazon failure, missing prices and timeouts against the retrieval boundary. Local failure tests are included; these are not a Firedrill cloud campaign.
-- **Amplitude / Statsig:** reuse the app's existing metadata-only telemetry and gates when this provider is integrated. Measure retrieval success separately from JSON validity and recommendation usefulness. This standalone experiment currently writes only its local audit.
-- **Cognee:** add per-user remembered preferences and past choices after account isolation is implemented. Never send unrelated user memories into a run.
-- **SingleStore:** mirror per-user source snapshots and task history after isolation is ready. Current app histories remain in SQLite.
-- **Senso:** possible later curated product/context source; not a confirmed Amazon catalog or a fix for blocked retailer pages.
-
-References: [Qwen3 4B model](https://ollama.com/library/qwen3:4b), [Ollama Chat API](https://docs.ollama.com/api/chat).
-
-## Verified local smoke test (November 20, 2026)
-
-Qwen3 4B completed two local model calls in approximately 3.7 seconds combined on Bill’s 48 GB Apple Silicon Mac. It generated an Amazon query, observed HTTP 503, and returned zero products with questions about guest count, dietary restrictions, hosting role and existing belongings. This verifies local inference and failure handling, not successful Amazon product research. No model API charges were incurred.
+Run `npm run test:workflow` for automated tests. Fixture tests verify bounded retrieval, unsupported numeric fields, unavailable companion, timeout cleanup, and no paid fallback. They are not a Firedrill cloud campaign. Model API spend is zero; electricity, hardware and internet costs are excluded.
