@@ -15,18 +15,19 @@ function render(runs){
  $('#conversation-messages').innerHTML=runs.length?runs.map(r=>`<div class="run-block">${r.messages.filter(m=>['user','assistant'].includes(m.role)).map(m=>`<div class="message ${esc(m.role)}"><span class="role">${m.role==='user'?'YOU':'UPNEXT'}${r.mode==='demo'&&m.role==='assistant'?' · SIMULATED':''}</span>${esc(m.content)}</div>`).join('')}${['queued','running'].includes(r.status)?'<p class="hint" role="status">Thinking through your occasion and comparing options…</p>':''}${renderPlan(r)}${r.result?`<details><summary>Evidence & missing information</summary><p class="hint">${r.result.missing_information.map(esc).join(' ')||'Check retailer details before buying.'}</p><div class="sources">${r.mode==='demo'?'<p class="hint">Demo sources are fictional and not purchase links.</p>':sources(r.result)}</div></details>`:''}${['completed','no_action'].includes(r.status)?(r.feedback?`<p class="hint">Feedback recorded: ${esc(r.feedback.value.replaceAll('_',' '))}.</p>`:`<div class="feedback"><button class="secondary" data-run="${esc(r.id)}" data-feedback="helpful">Helpful</button><button class="secondary" data-run="${esc(r.id)}" data-feedback="not_helpful">Not helpful</button><button class="secondary" data-run="${esc(r.id)}" data-feedback="dismissed">Dismiss</button></div>`):''}<div class="run-footer"><span>${esc(({completed:'Ready for your review',no_action:'You’re already covered',failed:'Couldn’t finish this plan',blocked:'Connection needed',interrupted:'Please try again',running:'Preparing your plan',queued:'Getting started'})[r.status]||r.status)}${r.mode==='demo'?' · Sample plan':''}</span><span>Saved to your plans</span></div></div>`).join(''):'<div class="empty"><h3>Start a new plan.</h3><p>Describe an occasion to see recommendations here.</p></div>';
  for(const b of document.querySelectorAll('[data-feedback]'))b.onclick=async()=>{b.disabled=true;try{await api('/api/agent/feedback',{run_id:b.dataset.run,value:b.dataset.feedback});await loadConversation();}catch(e){fail(e);b.disabled=false;}};
 }
-async function refreshConversations(){const d=await api('/api/agent/conversations');$('#conversation').innerHTML='<option value="">Start a new plan</option>'+d.conversations.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');$('#conversation').value=current||'';
+async function refreshConversations(){const d=await api('/api/agent/conversations');$('#conversation').innerHTML='<option value="">Start a new plan</option>'+d.conversations.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');$('#conversation').value=current||'';$('#history-conversation').innerHTML='<option value="">Choose a saved plan</option>'+d.conversations.map(c=>`<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');$('#history-conversation').value=current||'';
  const recent=await Promise.all(d.conversations.slice(0,12).map(c=>api(`/api/agent/conversations/${c.id}`)));
  const inbox=recent.flatMap(x=>x.runs).filter(r=>r.trigger==='proactive').slice(-5).reverse();$('#inbox').innerHTML=inbox.length?inbox.map(r=>`<p><button class="secondary" data-open="${r.conversation_id}">${esc(r.result?.summary||r.status)}</button></p>`).join(''):'<p class="hint">No upcoming suggestions yet.</p>';
  for(const b of document.querySelectorAll('[data-open]'))b.onclick=()=>{current=b.dataset.open;$('#conversation').value=current;loadConversation().catch(fail);};
 }
-async function loadConversation(){if(!current){render([]);return [];}const d=await api(`/api/agent/conversations/${current}`);render(d.runs);return d.runs;}
+async function loadConversation(){$('#history-conversation').value=current||'';if(!current){render([]);return [];}const d=await api(`/api/agent/conversations/${current}`);render(d.runs);return d.runs;}
 $('#conversation').onchange=()=>{current=$('#conversation').value||null;loadConversation().catch(fail);};
-$('#new-conversation').onclick=()=>{if(polling)return;current=null;$('#conversation').value='';render([]);$('#message').focus();};
+$('#history-conversation').onchange=()=>{current=$('#history-conversation').value||null;$('#conversation').value=current||'';loadConversation().catch(fail);};
+$('#new-conversation').onclick=()=>{if(polling)return;current=null;$('#conversation').value='';render([]);location.hash='calendar-view';$('#message').focus();};
 for(const b of document.querySelectorAll('[data-prompt]'))b.onclick=()=>{$('#message').value=b.dataset.prompt;$('#message').focus();};
 $('#agent-form').onsubmit=async e=>{
  e.preventDefault();if(polling)return;polling=true;$('#research').disabled=true;$('#conversation').disabled=true;$('#new-conversation').disabled=true;$('#agent-error').hidden=true;
- try{const d=await api('/api/agent/runs',{message:$('#message').value,mode:researchMode,conversation_id:current,event_id:$('#event').value||null});current=d.conversation_id;$('#message').value='';await refreshConversations();
+ try{const d=await api('/api/agent/runs',{message:$('#message').value,mode:researchMode,conversation_id:current,event_id:$('#event').value||null});current=d.conversation_id;$('#message').value='';await refreshConversations();location.hash='saved-plans';
  const started=Date.now();for(;;){const runs=await loadConversation();const run=runs.find(r=>r.id===d.id);if(run&&!['queued','running'].includes(run.status))break;if(Date.now()-started>600000)throw Error('This run is still pending. You can return to this plan later.');await new Promise(r=>setTimeout(r,1200));}
  }catch(e){fail(e);}finally{polling=false;$('#research').disabled=false;$('#conversation').disabled=false;$('#new-conversation').disabled=false;}
 };
@@ -65,5 +66,10 @@ if(connection==='calendar')$('#connection-message').textContent='Calendar connec
 if(connection)history.replaceState(null,'','/');
 init().catch(e=>{$('#connection-message').textContent=e.message;});
 
-function updateNavigation(){for(const link of document.querySelectorAll(".sidebar .nav")){const active=link.hash===(location.hash==="#saved-plans"?"#saved-plans":"#calendar-view");link.classList.toggle("active",active);if(active)link.setAttribute("aria-current","location");else link.removeAttribute("aria-current");}}
-window.addEventListener("hashchange",updateNavigation);updateNavigation();
+function updateNavigation(){
+ const history=location.hash==='#saved-plans';
+ $('#calendar-page').hidden=history;$('#history-page').hidden=!history;
+ document.querySelector('.page-heading h1').textContent=history?'Purchase history':'What’s up next?';
+ for(const link of document.querySelectorAll('.sidebar .nav')){const active=link.hash===(history?'#saved-plans':'#calendar-view');link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+}
+window.addEventListener('hashchange',updateNavigation);updateNavigation();
