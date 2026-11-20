@@ -49,6 +49,10 @@ def worker():
                     text=page.locator('body').inner_text()
                     if re.search(r'enter the characters you see|robot check|sorry! something went wrong|verify that you are not a robot',text,re.I):
                         reply.put({'error':'amazon_blocked','text':'','links':[]});continue
+                    if p.path.startswith('/dp/'):
+                        try:
+                            page.wait_for_function("Array.from(document.querySelectorAll('#landingImage,#imgBlkFront,#main-image')).some(i=>i.complete && i.naturalWidth>40)",timeout=5000)
+                        except Exception:pass
                     data=page.evaluate('''() => {
                       const products=[];const seen=new Set();
                       for(const a of document.querySelectorAll('a[href]')){
@@ -56,7 +60,7 @@ def worker():
                         if(asin&&!seen.has(asin)){seen.add(asin);products.push({url:'https://www.amazon.com/dp/'+asin,href:a.href});}
                         if(products.length>=100)break;
                       }
-                      return {products,title:document.querySelector('#productTitle')?.innerText.trim()||'',image_url:document.querySelector('#landingImage')?.currentSrc||''};
+                      return {products,title:document.querySelector('#productTitle')?.innerText.trim()||'',image_url:Array.from(document.querySelectorAll('#landingImage,#imgBlkFront,#main-image')).find(i=>i.complete&&i.naturalWidth>40)?.currentSrc||''};
                     }''')
                     for product in data['products']:product_links[product['url']]=product['href']
                     if len(product_links)>300:product_links=dict(list(product_links.items())[-300:])

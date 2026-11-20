@@ -44,6 +44,7 @@ def db():
     CREATE TABLE IF NOT EXISTS triggers(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, run_id TEXT);
     CREATE TABLE IF NOT EXISTS review_tasks(id TEXT PRIMARY KEY, run_id TEXT UNIQUE NOT NULL, payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS item_decisions(event_id TEXT NOT NULL,item_key TEXT NOT NULL,updated_at TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(event_id,item_key));
+    CREATE TABLE IF NOT EXISTS product_images(item_key TEXT PRIMARY KEY,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS preference_notes(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,text TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS scans(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL);
     ''')

@@ -1,6 +1,7 @@
 import {renderCalendar,updateRecommendationCounts} from '/calendar-view.js';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let drafts={};
+const thumbnailRefreshes=new Set();
 let allRuns=[],events=[],selectedEvent=null,current=null,researchMode='demo',shopping={decisions:[],notes:[]},authenticated=false,pollTimer=null,submitting=false;
 const pending=r=>['queued','running'].includes(r.status);
 const itemKey=url=>url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:[/?#]|$)/i)?.[1].toUpperCase()||url;
@@ -11,16 +12,15 @@ function announce(text){$('#action-status').textContent=text;}
 function hiddenItem(item,eventId){const key=itemKey(item.source_url);return shopping.decisions.some(d=>d.item_key===key&&(d.action==='purchased'||d.event_id===eventId));}
 function combinedPlan(eventId){
  const runs=eventRuns(eventId).filter(r=>r.result&&['completed','no_action'].includes(r.status));
- const live=runs.filter(r=>r.mode==='live'),eligible=live.length?live:runs,items=new Map(),recipes=new Map();
- for(const run of eligible){for(const group of run.result.groups||[]){for(const item of group.items){items.set(itemKey(item.source_url),{...item,_run_id:run.id,category:group.category,category_reason:group.reason});}}for(const recipe of run.result.recipes||[])recipes.set(recipe.name,recipe);}
+ const live=runs.filter(r=>r.mode==='live'),eligible=live.length?live:runs,items=new Map();
+ for(const run of eligible){for(const group of run.result.groups||[]){for(const item of group.items){const key=itemKey(item.source_url),image=item.image_url||shopping.images?.[key]?.image_url||items.get(key)?.image_url;items.set(key,{...item,image_url:image,_run_id:run.id,category:group.category,category_reason:group.reason});}}}
  const groups=new Map();for(const item of items.values()){if(hiddenItem(item,eventId))continue;if(!groups.has(item.category))groups.set(item.category,{category:item.category,reason:item.category_reason,items:[]});groups.get(item.category).items.push(item);}
- return {mode:live.length?'live':'demo',result:{groups:[...groups.values()],recipes:[...recipes.values()]}};
+ return {mode:live.length?'live':'demo',result:{groups:[...groups.values()],recipes:[]}};
 }
 function renderPlan(r){
  const groups=r.result?.groups||((r.result?.items||[]).length?[{category:'Shopping options',reason:'',items:r.result.items}]:[]);
- const products=groups.map(g=>`<section class="category"><div class="category-heading"><h3>${esc(g.category)}</h3><span class="badge">${g.items.length} ${g.items.length===1?'option':'alternatives'}</span></div><p class="hint">${esc(g.reason)}</p><div class="product-grid">${g.items.map(i=>`<article class="product">${i.image_url?`<img class="product-thumbnail" src="${esc(i.image_url)}" alt="${esc(i.name)}" loading="lazy" referrerpolicy="no-referrer">`:``}<span class="product-label">${r.mode==='demo'?'SAMPLE PRODUCT':'AMAZON.COM'}</span><h3>${esc(i.name)}</h3>${i.variant?`<p class="product-variant">${esc(i.variant)}</p>`:``}<div class="product-facts"><b>${i.price_cents===null?'Price unavailable':`$${(i.price_cents/100).toFixed(2)}`}</b><span>${i.rating==null?'Rating unavailable':`★ ${Number(i.rating).toFixed(1)} / 5`}<small>${i.review_count==null?'Review count unavailable':`${Number(i.review_count).toLocaleString()} reviews`}</small></span></div><p><b>Why it fits:</b> ${esc(i.reason)}</p><p class="hint">${i.uncertainties.map(esc).join(' ')}</p>${r.mode==='demo'?'<span class="demo-link">Sample item · not available to buy</span>':`<a class="buy-link" href="${esc(i.source_url)}" target="_blank" rel="noopener noreferrer">View item on Amazon</a>`}${r.mode==='live'?`<div class="item-actions"><button class="item-check" data-item-action="purchased" data-run="${esc(i._run_id||r.id)}" data-url="${esc(i.source_url)}" aria-label="Mark ${esc(i.name)} as purchased" title="Mark as purchased">✓ <span>Purchased</span></button><button class="item-dismiss" data-item-action="dismissed" data-run="${esc(i._run_id||r.id)}" data-url="${esc(i.source_url)}" aria-label="Don’t buy ${esc(i.name)}" title="Don’t buy this">× <span>Not for me</span></button></div>`:''}</article>`).join('')}</div></section>`).join('');
- const recipes=r.result?.recipes||[];
- return products+(recipes.length?`<section class="category"><div class="category-heading"><h3>Recipe ideas</h3><span class="badge">${recipes.length} ideas</span></div><p class="hint">Generated ideas. Prices and Amazon ratings apply only to linked ingredients, not recipes.</p><div class="product-grid">${recipes.map(recipe=>`<article class="product recipe"><span class="product-label">FOR THE TABLE</span><h3>${esc(recipe.name)}</h3><p>${esc(recipe.reason)}</p><details><summary>Ingredients & preparation</summary><ul>${recipe.ingredients.map(x=>`<li>${esc(x)}</li>`).join('')}</ul><ol>${recipe.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></details>${r.mode==='live'?(recipe.ingredient_links||[]).map(l=>`<a class="text-link" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)} on Amazon</a>`).join(''):''}<p class="hint">${esc(recipe.note)}</p></article>`).join('')}</div></section>`:'');
+ const products=groups.map(g=>`<section class="category"><div class="category-heading"><h3>${esc(g.category)}</h3><span class="badge">${g.items.length} ${g.items.length===1?'option':'alternatives'}</span></div><p class="hint">${esc(g.reason)}</p><div class="product-grid">${g.items.map(i=>`<article class="product">${i.image_url?`<img class="product-thumbnail" src="${esc(i.image_url)}" alt="${esc(i.name)}" loading="lazy" referrerpolicy="no-referrer">`:`<div class="product-thumbnail thumbnail-placeholder">${shopping.images?.[itemKey(i.source_url)]?.status==='unavailable'?'Image unavailable':'Loading image…'}</div>`}<span class="product-label">${r.mode==='demo'?'SAMPLE PRODUCT':'AMAZON.COM'}</span><h3>${esc(i.name)}</h3>${i.variant?`<p class="product-variant">${esc(i.variant)}</p>`:``}<div class="product-facts"><b>${i.price_cents===null?'Price unavailable':`$${(i.price_cents/100).toFixed(2)}`}</b><span>${i.rating==null?'Rating unavailable':`★ ${Number(i.rating).toFixed(1)} / 5`}<small>${i.review_count==null?'Review count unavailable':`${Number(i.review_count).toLocaleString()} reviews`}</small></span></div><p><b>Why it fits:</b> ${esc(i.reason)}</p><p class="hint">${i.uncertainties.map(esc).join(' ')}</p>${r.mode==='demo'?'<span class="demo-link">Sample item · not available to buy</span>':`<a class="buy-link" href="${esc(i.source_url)}" target="_blank" rel="noopener noreferrer">View item on Amazon</a>`}${r.mode==='live'?`<div class="item-actions"><button class="item-check" data-item-action="purchased" data-run="${esc(i._run_id||r.id)}" data-url="${esc(i.source_url)}" aria-label="Mark ${esc(i.name)} as purchased" title="Mark as purchased">✓ <span>Purchased</span></button><button class="item-dismiss" data-item-action="dismissed" data-run="${esc(i._run_id||r.id)}" data-url="${esc(i.source_url)}" aria-label="Don’t buy ${esc(i.name)}" title="Don’t buy this">× <span>Not for me</span></button></div>`:''}</article>`).join('')}</div></section>`).join('');
+ return products;
 }
 function progress(run){const span=[...(run.spans||[])].reverse().find(s=>s.status==='running');if(span?.name.includes('recommendation'))return 'Writing your recommendations…';if(span?.name.includes('research.plan'))return 'Planning the Amazon search…';if(span?.name.includes('airbyte'))return 'Checking your calendar…';if((run.local_research_audit||[]).length)return 'Reading Amazon products…';return run.status==='queued'?'Your request is queued…':'Searching Amazon for your event…';}
 function renderChat(runs){
@@ -36,17 +36,17 @@ function renderMemory(){
 }
 function renderHistory(){
  const rows=shopping.decisions.filter(d=>d.action==='purchased');
- $('#purchased-items').innerHTML=rows.length?rows.map(d=>`<article class="purchase-row">${d.item.image_url?`<img src="${esc(d.item.image_url)}" alt="${esc(d.item.name)}" referrerpolicy="no-referrer">`:''}<div><h3>${esc(d.item.name)}</h3><p>${esc(d.item.variant||'')}</p><p class="hint">${esc(d.event_title)} · Marked purchased ${new Date(d.updated_at).toLocaleDateString()}</p><a href="${esc(d.item.source_url)}" target="_blank" rel="noopener noreferrer">View on Amazon</a><p class="hint">${d.item.price_cents==null?'Price unavailable':`Listed at $${(d.item.price_cents/100).toFixed(2)}`} · Marked by you, not a checkout receipt</p></div><button class="secondary" data-item-action="undo" data-run="${esc(d.run_id)}" data-url="${esc(d.item.source_url)}">Undo</button></article>`).join(''):'<div class="empty"><h3>No purchases yet</h3><p>Use the ✓ on a recommendation after you’ve purchased it.</p></div>';
+ $('#purchased-items').innerHTML=rows.length?rows.map(d=>`<article class="purchase-row">${(d.item.image_url||shopping.images?.[d.item_key]?.image_url)?`<img src="${esc(d.item.image_url||shopping.images?.[d.item_key]?.image_url)}" alt="${esc(d.item.name)}" referrerpolicy="no-referrer">`:''}<div><h3>${esc(d.item.name)}</h3><p>${esc(d.item.variant||'')}</p><p class="hint">${esc(d.event_title)} · Marked purchased ${new Date(d.updated_at).toLocaleDateString()}</p><a href="${esc(d.item.source_url)}" target="_blank" rel="noopener noreferrer">View on Amazon</a><p class="hint">${d.item.price_cents==null?'Price unavailable':`Listed at $${(d.item.price_cents/100).toFixed(2)}`} · Marked by you, not a checkout receipt</p></div><button class="secondary" data-item-action="undo" data-run="${esc(d.run_id)}" data-url="${esc(d.item.source_url)}">Undo</button></article>`).join(''):'<div class="empty"><h3>No purchases yet</h3><p>Use the ✓ on a recommendation after you’ve purchased it.</p></div>';
 }
 function renderWorkspace(){
  const counts={};for(const event of events){const plan=combinedPlan(event.id),count=plan.result.groups.reduce((n,g)=>n+g.items.length,0);counts[event.id]={live:plan.mode==='live'?count:0,demo:plan.mode==='demo'?count:0};}updateRecommendationCounts(counts);
  renderMemory();renderHistory();
  if(!selectedEvent)return;
  const runs=eventRuns(selectedEvent.id),plan=combinedPlan(selectedEvent.id);
- $('#event-recommendations').innerHTML=plan.result.groups.length||plan.result.recipes.length?renderPlan(plan):'<div class="empty"><h3>Make a plan for this event</h3><p>Your recommendations will appear here. Ask UpNext in the chat to get started.</p></div>';
+ $('#event-recommendations').innerHTML=plan.result.groups.length?renderPlan(plan):'<div class="empty"><h3>Make a plan for this event</h3><p>Your recommendations will appear here. Ask UpNext in the chat to get started.</p></div>';
  const dismissed=shopping.decisions.filter(d=>d.action==='dismissed'&&d.event_id===selectedEvent.id);$('#dismissed-items').hidden=!dismissed.length;
  $('#dismissed-list').innerHTML=dismissed.map(d=>`<div class="dismissed-row"><span>${esc(d.item.name)}</span><button class="text-button" data-item-action="undo" data-run="${esc(d.run_id)}" data-url="${esc(d.item.source_url)}">Restore</button></div>`).join('');
- renderChat(runs);
+ renderChat(runs);refreshThumbnails();
 }
 function mergeRuns(runs){const map=new Map(allRuns.map(r=>[r.id,r]));for(const r of runs)map.set(r.id,r);allRuns=[...map.values()];}
 async function refreshRuns(){const d=await api('/api/agent/conversations');const conversations=await Promise.all(d.conversations.map(c=>api(`/api/agent/conversations/${c.id}`)));allRuns=conversations.flatMap(c=>c.runs);renderWorkspace();schedulePoll();}
@@ -79,7 +79,7 @@ function route(){
  $('.event-workspace').hidden=detail&&!selectedEvent;
  if(detail){$('#event-title').textContent=selectedEvent?.title||'Event not found';$('#event-date').textContent=selectedEvent?`${selectedEvent.date} · ${selectedEvent.all_day?'All day':(selectedEvent.start?.dateTime?.slice(11,16)||'')+' '+(selectedEvent.start?.timeZone||'')}`:'This event is no longer in your synced calendar. Return to Calendar or sync again.';current=selectedEvent?eventRuns(selectedEvent.id).at(-1)?.conversation_id||null:null;}
  for(const link of document.querySelectorAll('.sidebar .nav')){const active=link.hash===(isHistory?'#saved-plans':'#calendar-view');link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
- renderWorkspace();schedulePoll();
+ renderWorkspace();schedulePoll();refreshThumbnails();
 }
 window.addEventListener('hashchange',route);$('#back-calendar').onclick=()=>{location.hash='calendar-view';};
 const calendarMenu=$('#calendar-account-menu'),calendarToggle=$('#calendar-menu-toggle');
@@ -91,3 +91,12 @@ $('#sync-calendar').onclick=async()=>{const button=$('#sync-calendar');button.di
 $('#disconnect-calendar').onclick=async()=>{try{await api('/api/calendar/disconnect',{});await refreshCalendar();$('#sync-status').textContent='Disconnected. Your saved purchases remain.';}catch(error){fail(error);}};
 async function init(){const account=await api('/auth/me');if(!account.user){$('#google-login').hidden=!account.configured;$('#account-note').textContent='Sign in to save your plans and purchases.';return;}authenticated=true;$('#account-title').textContent=account.user.name;$('#account-note').textContent=account.user.email;$('#google-login').hidden=true;$('#logout').hidden=false;$('#shopping-workspace').hidden=false;const status=await api('/api/agent/status');researchMode=status.live_available?'live':'demo';$('#provider-note').textContent=status.provider==='ollama-local'?'Local Qwen':'UpNext';shopping=await api('/api/agent/shopping');await refreshCalendar();await refreshRuns();route();}
 init().catch(fail);
+
+async function refreshThumbnails(){
+ if(!selectedEvent||thumbnailRefreshes.has(selectedEvent.id))return;
+ const plan=combinedPlan(selectedEvent.id);
+ if(plan.mode!=='live'||!plan.result.groups.some(g=>g.items.some(i=>!i.image_url)))return;
+ const id=selectedEvent.id;thumbnailRefreshes.add(id);
+ try{shopping=await api('/api/agent/thumbnails',{event_id:id});renderWorkspace();}
+ catch(error){announce('Some product images could not be loaded. Reload to retry.');}
+}
