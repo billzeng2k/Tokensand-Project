@@ -79,3 +79,7 @@ Refresh and app-server restart preserve your seven-day UpNext session. The login
 A live Google sign-in, primary-calendar Airbyte sync, and refresh/server-restart session persistence were verified locally. Automated tests cover recurrence exceptions, yearly birthdays, DST, all-day dates and isolation. Amazon recommendations still use labeled previews until the backend model key is configured.
 
 Buy-by dates remain a follow-up feature. They should be editable planning deadlines tied to a specific occasion, using shipping/lead-time evidence and user preferences; they must not be represented as guaranteed delivery dates. The current **Plan for this event** action provides the event link for that future workflow.
+
+### Shopping-focused calendar
+
+The calendar hides routine and unrecognized event titles by default using a local keyword filter. Birthdays, holidays, parties, travel, dining and similar shopping occasions remain visible, as do events with saved live product recommendations. This is a display heuristic, not an LLM judgment or a claim that a purchase is necessary. **Show all events** restores the complete synced calendar; no source events or saved plans are deleted. Daily counts follow the visible events. Technical scope and counting notes live here rather than in the calendar UI.
