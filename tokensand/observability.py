@@ -43,6 +43,8 @@ def db():
     CREATE TABLE IF NOT EXISTS outbox(id TEXT PRIMARY KEY, run_id TEXT, payload TEXT NOT NULL, delivered INTEGER DEFAULT 0, attempts INTEGER DEFAULT 0, error TEXT);
     CREATE TABLE IF NOT EXISTS triggers(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, run_id TEXT);
     CREATE TABLE IF NOT EXISTS review_tasks(id TEXT PRIMARY KEY, run_id TEXT UNIQUE NOT NULL, payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS item_decisions(event_id TEXT NOT NULL,item_key TEXT NOT NULL,updated_at TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(event_id,item_key));
+    CREATE TABLE IF NOT EXISTS preference_notes(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,text TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS scans(id TEXT PRIMARY KEY, created_at TEXT NOT NULL, payload TEXT NOT NULL);
     ''')
     os.chmod(path,0o600)
@@ -89,6 +91,8 @@ def create_run(prompt,mode,conversation_id=None,trigger='manual',event_id=None):
         if conversation_id:
             if not c.execute('SELECT 1 FROM conversations WHERE id=?',(conversation_id,)).fetchone():raise ValueError('Conversation not found')
             if c.execute("SELECT 1 FROM runs WHERE conversation_id=? AND status IN ('queued','running')",(conversation_id,)).fetchone():raise ValueError('This conversation already has an active run')
+            linked=c.execute('SELECT payload FROM runs WHERE conversation_id=? LIMIT 1',(conversation_id,)).fetchone()
+            if linked and json.loads(linked[0]).get('event_id')!=event_id:raise ValueError('Conversation belongs to a different event')
         else:
             conversation_id=str(uuid.uuid4())
             c.execute('INSERT INTO conversations VALUES(?,?,?)',(conversation_id,stamp,clean(prompt[:90])))
@@ -133,7 +137,7 @@ def queue_event(run,event_type,properties=None,event_id=None):
     props={k:run.get(k) for k in ['conversation_id','mode','trigger','status','prompt_version','model']}
     props.update({'run_id':run['id'],'strategy':run.get('flags',{}).get('strategy'),'schema_version':1})
     props.update(properties or {})
-    allowed={'conversation_id','mode','trigger','status','prompt_version','model','run_id','strategy','schema_version','latency_ms','input_tokens','output_tokens','model_calls','source_count','item_count','cost_estimate_usd','feedback','span_kind','call_status','error_code','category_count','recipe_count','missing_rating_count','missing_price_count','retrieval_attempts','retrieval_successes'}
+    allowed={'conversation_id','mode','trigger','status','prompt_version','model','run_id','strategy','schema_version','latency_ms','input_tokens','output_tokens','model_calls','source_count','item_count','cost_estimate_usd','feedback','span_kind','call_status','error_code','category_count','recipe_count','missing_rating_count','missing_price_count','retrieval_attempts','retrieval_successes','item_action'}
     payload={'event_type':event_type,'user_id':analytics_id(),'insert_id':event_id or str(uuid.uuid4()),'time':int(datetime.now(timezone.utc).timestamp()*1000),'event_properties':{k:v for k,v in props.items() if k in allowed and v is not None}}
     with db() as c:c.execute('INSERT OR IGNORE INTO outbox(id,run_id,payload) VALUES(?,?,?)',(payload['insert_id'],run['id'],json.dumps(payload)))
 

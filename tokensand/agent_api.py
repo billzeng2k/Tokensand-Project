@@ -11,7 +11,7 @@ import threading
 import time
 from urllib.parse import urlparse,parse_qs
 from . import observability as ledger
-from . import agent, tenancy, auth
+from . import agent, tenancy, auth, shopping
 
 POOL=ThreadPoolExecutor(max_workers=1)
 SCAN_LOCK=threading.Lock()
@@ -115,6 +115,7 @@ def get(handler,path):
     if admin and not admin_allowed(handler):handler.send({'error':'Admin sign-in required'},401);return True
     if path=='/api/admin/users':handler.send({'users':auth.users()})
     elif path=='/api/agent/status':handler.send(status())
+    elif path=='/api/agent/shopping':handler.send(shopping.state())
     elif path=='/api/agent/conversations':handler.send({'conversations':ledger.conversations()})
     elif path.startswith('/api/agent/conversations/'):
         handler.send({'runs':ledger.conversation(path.rsplit('/',1)[-1])})
@@ -147,6 +148,12 @@ def post(handler,path,body):
             if cid is not None and (not isinstance(cid,str) or len(cid)>50):raise ValueError('Invalid conversation')
             if event_id is not None and (not isinstance(event_id,str) or len(event_id)!=64):raise ValueError('Invalid calendar event')
             run=submit(prompt,mode,cid,event_id=event_id);handler.send({'id':run['id'],'conversation_id':run['conversation_id']},202)
+        elif path=='/api/agent/item-action':
+            handler.send(shopping.decide(body.get('run_id'),body.get('source_url'),body.get('action')));tenancy.enqueue(POOL,agent.flush_events)
+        elif path=='/api/agent/memory':
+            if body.get('action')=='forget':shopping.forget(body.get('id'))
+            else:shopping.remember(body.get('text'))
+            handler.send(shopping.state())
         elif path=='/api/agent/preferences':
             if set(body)-{'preferences','budget_cents'}:raise ValueError('Only shopping preferences and budget can be updated here.')
             saved=ledger.set_settings(body);handler.send({'preferences':saved['preferences'],'budget_cents':saved['budget_cents']})

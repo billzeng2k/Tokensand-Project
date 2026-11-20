@@ -229,7 +229,10 @@ def execute(run_id):
             event=span(run,'calendar','airbyte.refresh',lambda:selected_event(run['event_id']))
             if event['status']=='cancelled':raise RuntimeError('calendar_event_unavailable')
             context['event']={k:event.get(k) for k in ('id','title','date','source','synced_at','updated')}
-        context['prior_recommendations']=[r['result'] for r in ledger.conversation(run['conversation_id']) if r.get('result')][-3:]
+        from . import shopping
+        context['shopping_memory']=shopping.context(run.get('event_id'))
+        context['conversation_history']=[{'role':m['role'],'content':m['content'][:1500]} for r in prior if r['id']!=run_id for m in r['messages'] if m['role'] in ('user','assistant')][-8:]
+        context['prior_recommendations']=[{'name':i['name'],'source_url':i['source_url']} for r in prior if r.get('result') for i in r['result'].get('items',[])][-30:]
         run['context']=context
         previous=ledger.conversation(run['conversation_id'])
         history=[{'role':m['role'],'content':m['content']} for r in previous if r['id']!=run_id for m in r['messages'] if m['role'] in ('user','assistant')][-12:]
