@@ -42,6 +42,11 @@ async function refreshCalendar(){
  $('#calendar-note').textContent=cal.synced_at?`Last synced ${new Date(cal.synced_at).toLocaleString()}.`:cal.connected?'Calendar connected. Sync to load your upcoming events.':'Connect your calendar, or describe an occasion below.';
  return cal;
 }
+const calendarMenu=$('#calendar-account-menu'),calendarToggle=$('#calendar-menu-toggle');
+function closeCalendarMenu(){calendarMenu.hidden=true;calendarToggle.setAttribute('aria-expanded','false');}
+calendarToggle.onclick=()=>{calendarMenu.hidden=!calendarMenu.hidden;calendarToggle.setAttribute('aria-expanded',String(!calendarMenu.hidden));};
+document.addEventListener('click',e=>{if(!$('#account-panel').contains(e.target))closeCalendarMenu();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!calendarMenu.hidden){closeCalendarMenu();calendarToggle.focus();}});
 $('#logout').onclick=async()=>{try{await api('/auth/logout',{});location.href='/';}catch(e){$('#connection-message').textContent=e.message;}};
 $('#sync-calendar').onclick=async()=>{const b=$('#sync-calendar');b.disabled=true;$('#sync-status').textContent='Syncing your upcoming events… This can take a few minutes.';try{await api('/api/calendar/sync',{});await refreshCalendar();$('#sync-status').textContent='Your calendar is up to date.';}catch(e){$('#sync-status').textContent=e.message;}finally{b.disabled=false;}};
 $('#disconnect-calendar').onclick=async()=>{try{await api('/api/calendar/disconnect',{});await refreshCalendar();$('#sync-status').textContent='Disconnected. Saved plans remain in your account. You can also revoke UpNext in your Google Account settings.';}catch(e){$('#sync-status').textContent=e.message;}};
