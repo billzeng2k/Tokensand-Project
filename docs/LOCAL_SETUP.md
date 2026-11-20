@@ -149,3 +149,7 @@ Use **WSL2 with Ubuntu** for the development backend and Firedrill runner. Insta
 Open http://localhost:8787 in Windows Chrome/Edge after starting `npm run app` in WSL. Default WSL localhost forwarding normally makes it reachable; if not, check Windows/WSL networking settings rather than exposing the backend to the public internet. Windows native Python/npm execution is not verified. This WSL setup is documented, but has not been executed on a Windows machine in this session.
 
 For a shared hosted website, only the backend developer needs these services. Hosting the Python service, configuring secrets, and adding user authentication/isolation remain deployment work. The current static Sites URL does not expose this local backend.
+
+## Optional real Google Calendar source
+
+Follow [AIRBYTE.md](AIRBYTE.md) to install the Airbyte source, create a Google Desktop OAuth client, sign in and use real events in the local app. Erica should follow its WSL2 instructions and authorize her own Google account. Gmail stays on the roadmap; no email access is requested.

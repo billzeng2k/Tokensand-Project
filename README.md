@@ -1,3 +1,7 @@
+# UpNext
+
+What you’ll need, before you need it. Repository name: `Tokensand-Project`.
+
 # Tokensand-Project
 
 A local web app and integration harness for a personal shopping agent with an audit trail. A synthetic calendar event becomes a shopping task after checking remembered preferences, ownership, price, size and delivery. The policy is deterministic today; real LLM planning, live calendars and retailer search are future work.
@@ -39,3 +43,7 @@ The original storage-cart prototype remains in root `index.html`, `app.js`, and 
 - `requirements.lock`, `package-lock.json`: pinned dependencies
 
 Keep `.env`, `.local`, virtual environments, models and generated Firedrill local plans out of Git. Each teammate maintains independent local state and signs in to services separately.
+
+### Google Calendar with Airbyte
+
+The app can now sync a Google Calendar through the official Airbyte Docker source and use a selected event in the shopping demo. Follow [the Mac/Windows setup and Google sign-in guide](docs/AIRBYTE.md). Start with `npm run calendar:install`, then `npm run calendar:connect` and `npm run calendar:sync`. Gmail remains a future integration. Product data and wardrobe preferences are still demo data; calendar authorization is per developer.

@@ -53,3 +53,7 @@ Baseline is a responsive web app usable in Chrome on Mac and Windows. Local deve
 - Airbyte: https://docs.airbyte.com/platform/context-layer/agent-access
 - Amplitude: https://www.amplitude.com/docs/amplitude-ai/agent-analytics/faq
 - Statsig: https://docs.statsig.com/sdks/debugging
+
+## Update: Airbyte Calendar is now implemented
+
+The official Docker source powers manual Calendar sync and event selection in the app. See [AIRBYTE.md](AIRBYTE.md). Each developer must complete Google OAuth before live use. Gmail and other connectors, automatic triggers and recurring-event expansion remain future work.

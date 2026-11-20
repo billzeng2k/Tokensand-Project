@@ -42,7 +42,9 @@ def run(tools, store, memory, profile, event_id='holiday-dinner-demo'):
         if event['status'] == 'cancelled':
             report['status'] = 'event_cancelled'
         else:
-            task_key = hashlib.sha256(f"{profile['user_id']}:{event['id']}:{event['need']}".encode()).hexdigest()
+            identity = f"{profile['user_id']}:{event['id']}:{event['need']}"
+            if event.get('updated'): identity += f":{event['updated']}"
+            task_key = hashlib.sha256(identity.encode()).hexdigest()
             existing = call('shopping', 'tasks.get', {'task_key': task_key})
             if existing:
                 report.update(status='already_saved', task=existing)

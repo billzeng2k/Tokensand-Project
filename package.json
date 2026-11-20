@@ -11,7 +11,11 @@
     "test:workflow": ".venv/bin/python -m pytest -q",
     "memory:seed": ".venv/bin/python -m tokensand.memory seed",
     "db:check": ".venv/bin/python -m tokensand.storage",
-    "app": ".venv/bin/python -m tokensand.server"
+    "app": ".venv/bin/python -m tokensand.server",
+    "calendar:connect": ".venv/bin/python scripts/connect_calendar.py",
+    "calendar:sync": ".venv/bin/python -m tokensand.calendar sync",
+    "calendar:status": ".venv/bin/python -m tokensand.calendar status",
+    "calendar:install": "docker pull --platform linux/amd64 airbyte/source-google-calendar:1.1.0"
   },
   "dependencies": {
     "@amplitude/analytics-node": "1.5.85",
