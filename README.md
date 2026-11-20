@@ -1,35 +1,41 @@
 # Tokensand-Project
 
-Cartwise is a rule-based shopping-agent prototype for finding a storage cart that fits a real space and budget.
+A local web app and integration harness for a personal shopping agent with an audit trail. A synthetic calendar event becomes a shopping task after checking remembered preferences, ownership, price, size and delivery. The policy is deterministic today; real LLM planning, live calendars and retailer search are future work.
 
-## Run
+## Start here
+
+- [Mac and Windows local setup](docs/LOCAL_SETUP.md)
+- [Firedrill connection and remaining hosted setup](docs/FIREDRILL.md)
+- [Sponsor baseline and add-on roadmap](docs/SPONSOR_ROADMAP.md)
+
+After completing local setup:
 
 ```sh
-python3 -m http.server 8765
+npm run app
 ```
 
-Open http://localhost:8765. No dependencies or API keys required.
+Open **http://localhost:8787** in Chrome, Safari or Edge. The app has a scenario picker, a saved-task result, rejected candidates, memory evidence, tool results and downloadable audit JSON. It does not require Codex. Windows development uses WSL2; a shared hosted backend is not deployed yet.
 
-## Demo
+```sh
+npm run demo             # real local Cognee + SingleStore, synthetic external services
+npm run test:workflow    # isolated policy + HTTP/JSONL transport tests
+npm run telemetry:test  # real Amplitude/Statsig SDKs in offline modes
+```
 
-1. Keep the default $50 budget and 16 × 18 × 28 inch space.
-2. Run the comparison: RÅSKOG compact is selected at an estimated $32.69 with 9% tax and $0 fees.
-3. Inspect the rejected alternatives and retailer evidence links.
-4. Save the purchase checklist, check off actions, open the retailer and download the checklist or audit JSON.
-5. Try a $10 budget to see the no-match case.
+## What is real versus simulated
 
-## Scope and evidence
+Cognee memory and SingleStore persistence run locally. Amplitude uses a local file transport; Statsig evaluates offline overrides. Calendar events, products and task-service faults are synthetic. No order is placed or payment collected. Firedrill is connected and registered; cloud simulations still need hosted tools/world configuration and a reviewed credit estimate.
 
-Four IKEA US product snapshots retrieved November 20, 2026. Sources are linked in `engine.mjs`. The policy selects the lowest estimated total among eligible options, allows 90-degree rotation and adds 0.5 inches clearance per dimension. Tax applies to item price; fees are user supplied. Member promotions are excluded.
+The original storage-cart prototype remains in root `index.html`, `app.js`, and `engine.mjs`. The new standalone browser app is under `web/` with its Python API in `tokensand/server.py`. Only the new server connects to the local workflow. The previously deployed static site is not automatically updated by these backend changes.
 
-This prototype uses deterministic rules, not an LLM or live product search. Prices and availability are not refreshed automatically. It saves a local shopping checklist, not a retailer cart, reservation or order. Storage is browser-local and the exported audit is editable, not tamper-proof. No payment data is collected.
+## Repo layout
 
-## Validation
+- `tokensand/`: policy, memory, persistence, tool adapters, server and JSONL bridge
+- `web/`: browser app
+- `fixtures/`: clearly labeled synthetic event, profile and product data
+- `tests/`: repeatable offline tests
+- `scripts/`: local environment generation, telemetry and Firedrill plan preparation
+- `compose.yaml`: loopback-only pinned SingleStore development container
+- `requirements.lock`, `package-lock.json`: pinned dependencies
 
-Core evaluation checked for default selection, no match, rotated fit and material restrictions. Browser verified recommendation rendering and successful checklist creation.
-
-## Files
-
-- `index.html`: responsive interface
-- `app.js`: checklist, local storage, audit and downloads
-- `engine.mjs`: sourced catalog and decision policy
+Keep `.env`, `.local`, virtual environments, models and generated Firedrill local plans out of Git. Each teammate maintains independent local state and signs in to services separately.

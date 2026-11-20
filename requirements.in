@@ -1,0 +1,4 @@
+cognee[gliner]==1.6.10
+pymysql
+python-dotenv
+pytest

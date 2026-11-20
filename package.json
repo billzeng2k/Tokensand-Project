@@ -1,0 +1,25 @@
+{
+  "name": "tokensand-project",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "firedrill": "node_modules/node/bin/node node_modules/firedrill-run/bin/firedrill.mjs",
+    "telemetry:test": "node_modules/node/bin/node scripts/telemetry.mjs --test",
+    "setup": "python3 scripts/setup.py",
+    "demo": ".venv/bin/python -m tokensand.workflow --scenario happy",
+    "test:workflow": ".venv/bin/python -m pytest -q",
+    "memory:seed": ".venv/bin/python -m tokensand.memory seed",
+    "db:check": ".venv/bin/python -m tokensand.storage",
+    "app": ".venv/bin/python -m tokensand.server"
+  },
+  "dependencies": {
+    "@amplitude/analytics-node": "1.5.85",
+    "@statsig/statsig-node-core": "0.24.2",
+    "dotenv": "^17.2.0"
+  },
+  "devDependencies": {
+    "firedrill-run": "3.0.11",
+    "node": "24.11.1"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "source": "synthetic fixture; not real retailer offers",
+  "event": {"id": "holiday-dinner-demo", "title": "Holiday dinner", "date": "2026-12-04", "status": "confirmed", "need": "jacket"},
+  "profile": {"user_id": "demo-user", "budget_cents": 8000, "size": "M", "owned_ids": ["navy-jacket"]},
+  "memory": "The demo user prefers cotton jackets. The demo user rejected wool because it felt itchy. The demo user already owns a navy jacket.",
+  "products": [
+    {"id": "navy-jacket", "name": "Navy jacket", "price_cents": 4900, "material": "cotton", "sizes": ["M"], "delivery_date": "2026-12-01", "in_stock": true, "source": "fixture://catalog/navy-jacket"},
+    {"id": "wool-jacket", "name": "Wool evening jacket", "price_cents": 6500, "material": "wool", "sizes": ["M"], "delivery_date": "2026-12-01", "in_stock": true, "source": "fixture://catalog/wool-jacket"},
+    {"id": "cotton-jacket", "name": "Cotton evening jacket", "price_cents": 5900, "material": "cotton", "sizes": ["M", "L"], "delivery_date": "2026-12-02", "in_stock": true, "source": "fixture://catalog/cotton-jacket"},
+    {"id": "late-jacket", "name": "Linen jacket", "price_cents": 4500, "material": "linen", "sizes": ["M"], "delivery_date": "2026-12-10", "in_stock": true, "source": "fixture://catalog/late-jacket"}
+  ]
+}

@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.venv/
+node_modules/
+.local/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+firedrill/*-local.json
