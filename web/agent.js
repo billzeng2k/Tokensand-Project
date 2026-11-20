@@ -1,7 +1,7 @@
 import {renderCalendar} from '/calendar-view.js';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let current=null,polling=false,researchMode="demo";
-async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(r.status===401){$('#shopping-workspace').hidden=true;$('#google-login').hidden=false;$('#logout').hidden=true;current=null;render([]);}if(!r.ok)throw Error(d.error||'Request failed');return d;}
+async function api(path,body){const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(r.status===401){$('#shopping-workspace').hidden=true;$('#google-login').hidden=false;$('#logout').hidden=true;$('#account-title').textContent='Your plans, connected';$('#account-note').textContent='Sign in to save your plans.';setCalendarStatus(false);current=null;render([]);}if(!r.ok)throw Error(d.error||'Request failed');return d;}
 function fail(e){$('#agent-error').textContent=e.message;$('#agent-error').hidden=false;}
 function sources(result){return (result?.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title||s.url)}</a>`).join('');}
 function renderPlan(r){
@@ -31,8 +31,10 @@ $('#agent-form').onsubmit=async e=>{
  }catch(e){fail(e);}finally{polling=false;$('#research').disabled=false;$('#conversation').disabled=false;$('#new-conversation').disabled=false;}
 };
 $('#preferences-form').onsubmit=async e=>{e.preventDefault();try{await api('/api/agent/preferences',{preferences:$('#personal-preferences').value,budget_cents:Math.round(Number($('#item-budget').value)*100)});$('#preferences-status').textContent='Saved. We’ll use these for your next recommendations.';}catch(e){fail(e);}};
+function setCalendarStatus(connected){const status=$('#account-calendar-status');status.textContent=connected?'Google Calendar connected':'Google Calendar not connected';status.classList.toggle('connected',connected);}
 async function refreshCalendar(){
  const cal=await api('/api/calendar');
+ setCalendarStatus(cal.connected);
  renderCalendar(cal,event=>{if(polling)return;$('#event').value=event.id;$('#message').value=`Help me prepare for ${event.title} on ${event.date}. Consider what I already own and whether I need to buy anything.`;$('#agent-form').scrollIntoView({behavior:'smooth',block:'start'});$('#message').focus({preventScroll:true});});
  $('#connect-calendar').textContent=cal.connected?'Reconnect Google Calendar':'Connect Google Calendar';
  $('#sync-calendar').hidden=!cal.connected;$('#disconnect-calendar').hidden=!cal.connected;
