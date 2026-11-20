@@ -85,3 +85,12 @@ body.calendar-screen{height:100dvh;overflow:hidden}.calendar-screen .shell{heigh
 .research-light{display:inline-block;width:6px;height:6px;border-radius:50%;background:#2563eb;margin-right:6px;animation:research-pulse 1.8s ease-out infinite}
 @keyframes research-pulse{0%,100%{box-shadow:0 0 0 0 #2563eb00}50%{box-shadow:0 0 0 4px #2563eb30}}
 @media(prefers-reduced-motion:reduce){.research-light{animation:none}}
+
+.shopper-app .product-grid .product-purchased{background:#eef8f1;border:2px solid #39825c;box-shadow:0 0 0 2px #39825c12}
+.shopper-app .product-grid .product-dismissed{background:#f1f2f3;border-color:#d4d7db;color:#646b74}
+.product-dismissed .product-thumbnail{filter:grayscale(1);opacity:.5}
+.product-dismissed .product-facts,.product-dismissed>h3,.product-dismissed>p{color:#737980}
+.item-decision-label{font-size:12px;font-weight:650;margin-bottom:10px;color:#276246}
+.product-dismissed .item-decision-label{color:#666d76}
+
+.shopper-app .product .item-actions button{font-size:12px}
