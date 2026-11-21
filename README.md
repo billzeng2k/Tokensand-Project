@@ -29,6 +29,7 @@ The app now requires Google sign-in. Users connect Calendar inside UpNext; devel
 
 - [Local Qwen and Amazon setup](docs/LOCAL_QWEN.md)
 - [Daily recommendation schedules](docs/AUTOMATION.md)
+- [Cognee shopping memory](docs/COGNEE_MEMORY.md)
 - [Event chat, purchase history and memory setup](docs/EVENT_CHAT.md)
 
 - [Erica: Windows Google OAuth setup, step by step](docs/WINDOWS_GOOGLE_OAUTH.md)

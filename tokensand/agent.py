@@ -1,3 +1,4 @@
+from . import tenancy
 """Bounded web-research agent with a local simulated provider and durable traces."""
 import asyncio
 from datetime import date,timedelta
@@ -222,6 +223,14 @@ def execute(run_id):
             context['event']={k:event.get(k) for k in ('id','title','description','date','source','synced_at','updated')}
         from . import shopping
         context['shopping_memory']=shopping.context(run.get('event_id'))
+        if tenancy.USER.get() and os.getenv('UPNEXT_COGNEE_MEMORY','0')=='1':
+            from . import cognee_memory
+            try:
+                context['shopping_memory']=span(run,'memory','cognee.session_recall',lambda:cognee_memory.recall(context['shopping_memory'],run.get('event_id')))
+                context['memory_backend']='cognee-session-local'
+            except Exception:
+                context['memory_backend']='profile-fallback'
+                run['memory_warning']='Cognee unavailable; used current saved preferences and purchase history.'
         context['conversation_history']=[{'role':m['role'],'content':m['content'][:1500]} for r in prior if r['id']!=run_id for m in r['messages'] if m['role'] in ('user','assistant')][-8:]
         context['prior_recommendations']=[{'name':i['name'],'source_url':i['source_url']} for r in prior if r.get('result') for i in r['result'].get('items',[])][-30:]
         run['context']=context
