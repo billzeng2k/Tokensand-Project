@@ -1,35 +1,34 @@
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateOnly=value=>new Date(`${value}T12:00:00`);
+const weekStart=value=>{const d=new Date(value);d.setDate(d.getDate()-d.getDay());return d;};
 const dayKey=value=>`${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
 let data,anchor,selectEvent,mode='four-weeks',counts={},showAll=false;
 
-// A reversible title-based filter, not a claim that an event requires a purchase.
+// Hide only sleep events; all other occasions remain visible.
 export function isShoppingOccasion(event){
- const title=String(event.title||'').toLowerCase();
- if(/\b(sleep|bedtime|wake up|commute|focus time|standup|stand-up|daily sync)\b/.test(title)&&! /\b(party|birthday|wedding|trip|camping|gift|shopping)\b/.test(title))return false;
- return event.kind==='birthday'||event.kind==='holiday'||/\b(birthday|bday|party|potluck|thanksgiving|christmas|halloween|hanukkah|diwali|eid|easter|holiday|wedding|anniversary|graduation|baby shower|bridal shower|housewarming|gift|shopping|groceries|flight|travel|trip|vacation|camping|hiking|picnic|barbecue|bbq|dinner|hosting|festival|concert|costume|moving|move-in|skiing|marathon|beach)\b/.test(title);
+ return String(event.title||'').trim().toLowerCase()!=='sleep';
 }
 const root=()=>document.querySelector('#calendar-view');
 function onDay(event,day){const end=event.end?.date||event.end?.dateTime?.slice(0,10)||event.date;return event.date<=day&&(event.end?.date?day<end:day<=end);}
 function draw(){
  if(!data||!root())return;
  const first=new Date(anchor);
- const visibleEvents=data.events.filter(e=>showAll||isShoppingOccasion(e)||(counts[e.id]?.live||0)>0);
+ const visibleEvents=data.events.filter(e=>showAll||isShoppingOccasion(e));
  const days=Array.from({length:mode==='four-weeks'?28:7},(_,i)=>{const d=new Date(first);d.setDate(d.getDate()+i);return d;});
- root().innerHTML=`<div class="calendar-toolbar"><h2>${esc(first.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' – '+days.at(-1).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}))}</h2><div><button class="secondary" id="calendar-filter" aria-pressed="${showAll}">${showAll?'Show shopping occasions':'Show all events'}</button><button class="secondary" id="calendar-today">Today</button><button class="secondary" id="calendar-prev" aria-label="Previous ${mode}">‹</button><button class="secondary" id="calendar-next" aria-label="Next ${mode}">›</button><select id="calendar-mode" aria-label="Calendar view"><option value="week" ${mode==='week'?'selected':''}>7 days</option><option value="four-weeks" ${mode==='four-weeks'?'selected':''}>4 weeks</option></select></div></div><div class="calendar-board ${mode}">${days.map(d=>{
+ root().innerHTML=`<div class="calendar-toolbar"><h2>${esc(first.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' – '+days.at(-1).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}))}</h2><div><button class="secondary" id="calendar-filter" aria-pressed="${showAll}">${showAll?'Hide sleep':'Show sleep'}</button><button class="secondary" id="calendar-today">Today</button><button class="secondary" id="calendar-prev" aria-label="Previous ${mode}">‹</button><button class="secondary" id="calendar-next" aria-label="Next ${mode}">›</button><select id="calendar-mode" aria-label="Calendar view"><option value="week" ${mode==='week'?'selected':''}>7 days</option><option value="four-weeks" ${mode==='four-weeks'?'selected':''}>4 weeks</option></select></div></div><div class="calendar-board ${mode}">${days.map(d=>{
  const key=dayKey(d),items=visibleEvents.filter(e=>onDay(e,key));
- return `<section class="calendar-column ${key===data.window_start?'is-today':''} ${key<data.window_start||key>data.window_end?'out-of-range':''}" aria-label="${esc(d.toLocaleDateString(undefined,{dateStyle:'full'}))}"><header><span>${d.toLocaleDateString(undefined,{weekday:'short'})}</span><strong>${d.getDate()}</strong></header><div class="calendar-event-list" tabindex="0" aria-label="Events for ${key}">${items.map(e=>`<button class="calendar-event ${esc(e.kind)} ${counts[e.id]?.pending?'research-pending':''}" data-event="${esc(e.id)}"><span>${e.date<key?'Continues':e.all_day?'All day':esc(e.start?.dateTime?.slice(11,16)||'')}</span><b>${esc(e.title)}</b>${counts[e.id]?.pending?'<small class="event-research-status"><i class="research-light" aria-hidden="true"></i>Finding recommendations…</small>':''}<small class="event-purchase-count ${(counts[e.id]?.live||0)>0?'has-recommendations':''}">${(counts[e.id]?.live||0)>0?'<i class="recommendation-light" aria-hidden="true"></i>':''}${counts[e.id]?.live||0} recommended purchases</small>${counts[e.id]?.demo?`<small class="sample-count">${counts[e.id].demo} sample options</small>`:''}</button>`).join('')}</div></section>`;
+ return `<section class="calendar-column ${key===data.window_start?'is-today':''} ${key<data.window_start||key>data.window_end?'out-of-range':''}" aria-label="${esc(d.toLocaleDateString(undefined,{dateStyle:'full'}))}"><header><span>${d.toLocaleDateString(undefined,{weekday:'short'})}</span><strong>${d.getDate()}</strong></header><div class="calendar-event-list" tabindex="0" aria-label="Events for ${key}">${items.map(e=>`<button class="calendar-event ${esc(e.kind)} ${counts[e.id]?.pending?'research-pending':''}" data-event="${esc(e.id)}"><span>${e.date<key?'Continues':e.all_day?'All day':esc(e.start?.dateTime?.slice(11,16)||'')}</span><b>${esc(e.title)}</b>${counts[e.id]?.pending?'<small class="event-research-status"><i class="research-light" aria-hidden="true"></i>Finding recommendations…</small>':''}<small class="event-purchase-count ${(counts[e.id]?.live||0)>0?'has-recommendations':''}">${(counts[e.id]?.live||0)>0?'<i class="recommendation-light" aria-hidden="true"></i>':''}${counts[e.id]?.live||0} pending ${counts[e.id]?.live===1?'purchase':'purchases'}</small><small class="event-purchased-count">${counts[e.id]?.purchased||0} purchased ${counts[e.id]?.purchased===1?'item':'items'}</small>${counts[e.id]?.demo?`<small class="sample-count">${counts[e.id].demo} sample options</small>`:''}</button>`).join('')}</div></section>`;
  }).join('')}</div>${!data.events.length?`<p class="calendar-empty">${data.connected?'Sync your calendar using the Connected menu to load events.':'Connect Google Calendar using the card in the sidebar.'}</p>`:''}`;
  root().querySelectorAll('[data-event]').forEach(b=>b.onclick=()=>selectEvent(data.events.find(e=>e.id===b.dataset.event)));
  root().querySelector('#calendar-filter').onclick=()=>{showAll=!showAll;draw();};
  root().querySelector('#calendar-mode').onchange=e=>{mode=e.target.value;draw();};
- function move(n){anchor.setDate(anchor.getDate()+(mode==='week'?7:28)*n);if(dayKey(anchor)<data.window_start)anchor=dateOnly(data.window_start);draw();}
+ function move(n){anchor.setDate(anchor.getDate()+(mode==='week'?7:28)*n);if(dayKey(anchor)<dayKey(weekStart(dateOnly(data.window_start))))anchor=weekStart(dateOnly(data.window_start));draw();}
  root().querySelector('#calendar-prev').onclick=()=>move(-1);
  root().querySelector('#calendar-next').onclick=()=>move(1);
- root().querySelector('#calendar-today').onclick=()=>{anchor=dateOnly(data.window_start);draw();};
+ root().querySelector('#calendar-today').onclick=()=>{anchor=weekStart(dateOnly(data.window_start));draw();};
  const previous=new Date(anchor),next=new Date(anchor);previous.setDate(previous.getDate()-1);next.setDate(next.getDate()+(mode==='week'?7:28));
- root().querySelector('#calendar-prev').disabled=dayKey(previous)<data.window_start;
+ root().querySelector('#calendar-prev').disabled=dayKey(previous)<dayKey(weekStart(dateOnly(data.window_start)));
  root().querySelector('#calendar-next').disabled=dayKey(next)>data.window_end;
 }
-export function renderCalendar(calendar,onSelect){data={warnings:[],events:[],...calendar};selectEvent=onSelect;if(!anchor)anchor=dateOnly(data.window_start);draw();}
+export function renderCalendar(calendar,onSelect){data={warnings:[],events:[],...calendar};selectEvent=onSelect;if(!anchor)anchor=weekStart(dateOnly(data.window_start));draw();}
 export function updateRecommendationCounts(value){counts=value;draw();}

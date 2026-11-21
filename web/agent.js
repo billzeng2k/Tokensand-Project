@@ -1,6 +1,6 @@
 import {renderCalendar,updateRecommendationCounts} from '/calendar-view.js';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let drafts={};
+let drafts={},lookaheadDays=30;
 const thumbnailRefreshes=new Set();
 let allRuns=[],events=[],selectedEvent=null,current=null,researchMode='demo',shopping={decisions:[],notes:[]},authenticated=false,pollTimer=null,submitting=false;
 const pending=r=>['queued','running'].includes(r.status);
@@ -43,9 +43,26 @@ function renderHistory(){
  const rows=shopping.decisions.filter(d=>d.action==='purchased');
  $('#purchased-items').innerHTML=rows.length?rows.map(d=>`<article class="purchase-row">${(d.item.image_url||shopping.images?.[d.item_key]?.image_url)?`<img src="${esc(d.item.image_url||shopping.images?.[d.item_key]?.image_url)}" alt="${esc(d.item.name)}" referrerpolicy="no-referrer">`:''}<div><h3>${esc(d.item.name)}</h3><p>${esc(d.item.variant||'')}</p><p class="hint">${esc(d.event_title)} · Marked purchased ${new Date(d.updated_at).toLocaleDateString()}</p><a href="${esc(d.item.source_url)}" target="_blank" rel="noopener noreferrer">View on Amazon</a><p class="hint">${d.item.price_cents==null?'Price unavailable':`Listed at $${(d.item.price_cents/100).toFixed(2)}`} · Marked by you, not a checkout receipt</p></div><button class="secondary" data-item-action="undo" data-run="${esc(d.run_id)}" data-url="${esc(d.item.source_url)}">Undo</button></article>`).join(''):'<div class="empty"><h3>No purchases yet</h3><p>Use the ✓ on a recommendation after you’ve purchased it.</p></div>';
 }
+function homeProduct(i,event=null){
+ return `<article class="home-item ${event?'priority-item':''}">${event?`<a class="priority-event" href="#event-details/${esc(event.id)}">For ${esc(event.title)}<span>${new Date(event.date+'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}</span></a>`:''}<a class="home-item-image" href="${esc(i.source_url)}" target="_blank" rel="noopener noreferrer">${i.image_url?`<img src="${esc(i.image_url)}" alt="${esc(i.name)}" loading="lazy" referrerpolicy="no-referrer">`:'<span>Image unavailable</span>'}</a><div class="home-item-info"><span class="product-label">${esc(i.category)}</span><a class="home-item-title" href="${esc(i.source_url)}" target="_blank" rel="noopener noreferrer"><h3>${esc(i.name)}</h3></a><div class="home-item-facts"><b>${i.price_cents==null?'Price unavailable':`$${(i.price_cents/100).toFixed(2)}`}</b>${i.rating==null?'':`<span>★ ${Number(i.rating).toFixed(1)}</span>`}</div><p class="home-item-reason">${esc(i.reason)}</p><a class="priority-amazon" href="${esc(i.source_url)}" target="_blank" rel="noopener noreferrer">View on Amazon ↗</a>${renderItemActions(i,{})}</div></article>`;
+}
+function renderHome(){
+ const openEvents=new Set([...document.querySelectorAll('.home-event[open]')].map(e=>e.dataset.event));
+ const now=new Date(),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+ const owned=new Set(shopping.decisions.filter(d=>d.action==='purchased').map(d=>d.item_key));
+ const upcoming=events.filter(e=>{const date=new Date(e.date+'T00:00:00');return date>=today&&Math.round((date-today)/86400000)<=lookaheadDays;}).sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title));
+ const plans=upcoming.map(event=>{const plan=combinedPlan(event.id);return {event,items:plan.mode==='live'?plan.result.groups.flatMap(g=>g.items).filter(i=>!['dismissed','purchased'].includes(i._decision)&&!owned.has(itemKey(i.source_url))):[],busy:eventRuns(event.id).some(pending)};}).filter(p=>p.items.length||p.busy);
+ const count=plans.reduce((n,p)=>n+p.items.length,0),picks=[],categories=new Set(),products=new Set();
+ // Nearest occasions first; show one alternative per category and no duplicate products.
+ for(const {event,items} of plans){for(const item of items){const category=event.id+':'+item.category,key=itemKey(item.source_url);if(categories.has(category)||products.has(key))continue;categories.add(category);products.add(key);picks.push({event,item});if(picks.length===3)break;}if(picks.length===3)break;}
+ $('#home-overview').innerHTML=`<header class="home-heading"><div><p class="home-eyebrow">NEXT ${lookaheadDays} DAYS</p><h1>Get ready for what’s next.</h1></div><a class="secondary home-calendar-link" href="#calendar-view">View calendar →</a></header>${picks.length?`<section class="priority-section" aria-labelledby="priority-heading"><div class="priority-heading"><div><h2 id="priority-heading">Start here</h2><p>A few picks for your nearest events. Choose what you still need.</p></div><span class="priority-badge">${picks.length} ${picks.length===1?'pick':'picks'}</span></div><div class="priority-grid">${picks.map(({event,item})=>homeProduct(item,event)).join('')}</div></section>`:''}${plans.length?`<div class="home-more-heading"><h2>Browse by event</h2><span class="hint">${count} options · ${plans.length} ${plans.length===1?'event':'events'}</span></div>`+plans.map(({event,items,busy})=>{
+ const date=new Date(event.date+'T00:00:00'),days=Math.round((date-today)/86400000),when=days===0?'Today':days===1?'Tomorrow':`In ${days} days`;
+ return `<details class="home-event" data-event="${esc(event.id)}" ${openEvents.has(event.id)?'open':''}><summary class="home-event-heading"><div class="home-date"><span>${date.toLocaleDateString(undefined,{month:'short'})}</span><b>${date.getDate()}</b></div><div><h2>${esc(event.title)}</h2><p class="hint">${when} · ${items.length} purchase ${items.length===1?'option':'options'}${busy?' · Finding recommendations…':''}</p></div><span class="home-event-expand" aria-hidden="true">⌄</span></summary><a class="home-event-link" href="#event-details/${esc(event.id)}">Plan event →</a><div class="home-items">${items.map(i=>homeProduct(i)).join('')}</div>${!items.length?'<p class="home-working"><i class="research-light" aria-hidden="true"></i>Finding recommendations for this event…</p>':''}</details>`;
+ }).join(''):'<section class="home-empty"><h2>You’re all caught up.</h2><p>Sync your calendar to find ideas for upcoming occasions, or open an event to ask for something specific.</p><a class="buy-link" href="#calendar-view">Explore your calendar</a></section>'}`;
+}
 function renderWorkspace(){
- const counts={};for(const event of events){const plan=combinedPlan(event.id),count=plan.result.groups.reduce((n,g)=>n+g.items.filter(i=>!['dismissed','purchased'].includes(i._decision)).length,0);counts[event.id]={pending:eventRuns(event.id).some(pending),live:plan.mode==='live'?count:0,demo:plan.mode==='demo'?count:0};}updateRecommendationCounts(counts);
- renderMemory();renderHistory();
+ const counts={};for(const event of events){const plan=combinedPlan(event.id),count=plan.result.groups.reduce((n,g)=>n+g.items.filter(i=>!['dismissed','purchased'].includes(i._decision)).length,0);counts[event.id]={purchased:new Set(shopping.decisions.filter(d=>d.event_id===event.id&&d.action==='purchased').map(d=>d.item_key)).size,pending:eventRuns(event.id).some(pending),live:plan.mode==='live'?count:0,demo:plan.mode==='demo'?count:0};}updateRecommendationCounts(counts);
+ renderMemory();renderHistory();renderHome();
  if(!selectedEvent)return;
  const runs=eventRuns(selectedEvent.id),plan=combinedPlan(selectedEvent.id);
  $('#event-recommendations').innerHTML=plan.result.groups.length?renderPlan(plan):'<div class="empty"><h3>Make a plan for this event</h3><p>Your recommendations will appear here. Ask UpNext in the chat to get started.</p></div>';
@@ -75,14 +92,14 @@ function setCalendarStatus(connected){$('#account-calendar-status').textContent=
 async function refreshCalendar(){const cal=await api('/api/calendar');events=cal.events;setCalendarStatus(cal.connected);renderCalendar(cal,openCalendarEvent);$('#sync-calendar').hidden=!cal.connected;$('#disconnect-calendar').hidden=!cal.connected;$('#connect-calendar').textContent=cal.connected?'Reconnect Google Calendar':'Connect Google Calendar';route();return cal;}
 function openCalendarEvent(event){location.hash=`event-details/${event.id}`;route();}
 function route(){
- const isSettings=location.hash==='#settings',isHistory=location.hash==='#saved-plans',match=location.hash.match(/^#event-details\/([a-f0-9]{64})$/),detail=!!match;
+ const isHome=!location.hash||location.hash==='#home',isSettings=location.hash==='#settings',isHistory=location.hash==='#saved-plans',match=location.hash.match(/^#event-details\/([a-f0-9]{64})$/),detail=!!match;
  const nextEvent=match?events.find(e=>e.id===match[1])||null:null;
  if(selectedEvent?.id!==nextEvent?.id){if(selectedEvent)drafts[selectedEvent.id]=$('#message').value;$('#message').value=nextEvent?(drafts[nextEvent.id]||''):'';}
  selectedEvent=nextEvent;
- $('#settings-page').hidden=!isSettings;$('#calendar-page').hidden=isHistory||detail||isSettings;$('#history-page').hidden=!isHistory;$('#event-page').hidden=!detail;$('.page-heading').hidden=true;document.body.classList.toggle('calendar-screen',!isHistory&&!detail&&!isSettings);
+ $('#home-page').hidden=!isHome;$('#settings-page').hidden=!isSettings;$('#calendar-page').hidden=isHome||isHistory||detail||isSettings;$('#history-page').hidden=!isHistory;$('#event-page').hidden=!detail;$('.page-heading').hidden=true;document.body.classList.toggle('calendar-screen',!isHome&&!isHistory&&!detail&&!isSettings);
  $('.event-workspace').hidden=detail&&!selectedEvent;
  if(detail){$('#event-title').textContent=selectedEvent?.title||'Event not found';$('#event-date').textContent=selectedEvent?`${selectedEvent.date} · ${selectedEvent.all_day?'All day':(selectedEvent.start?.dateTime?.slice(11,16)||'')+' '+(selectedEvent.start?.timeZone||'')}`:'This event is no longer in your synced calendar. Return to Calendar or sync again.';current=selectedEvent?eventRuns(selectedEvent.id).at(-1)?.conversation_id||null:null;}
- for(const link of document.querySelectorAll('.sidebar .nav')){const active=link.hash===(isSettings?'#settings':isHistory?'#saved-plans':'#calendar-view');link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
+ for(const link of document.querySelectorAll('.sidebar .nav')){const active=link.hash===(isHome?'#home':isSettings?'#settings':isHistory?'#saved-plans':'#calendar-view');link.classList.toggle('active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
  renderWorkspace();schedulePoll();refreshThumbnails();
 }
 window.addEventListener('hashchange',route);
@@ -105,7 +122,7 @@ async function refreshThumbnails(){
  catch(error){announce('Some product images could not be loaded. Reload to retry.');}
 }
 
-function showAutomation(data){const cfg=data.settings;$('#automation-enabled').checked=cfg.enabled;$('#automation-time').value=cfg.time;$('#automation-zone').value=cfg.timezone;$('#automation-days').value=cfg.lookahead_days;$('#automation-last').textContent=data.last_run?`Last run: ${data.last_run.status} · ${data.last_run.runs_created} events researched`:'No scheduled run yet.';}
+function showAutomation(data){const cfg=data.settings;lookaheadDays=cfg.lookahead_days;renderHome();$('#automation-enabled').checked=cfg.enabled;$('#automation-time').value=cfg.time;$('#automation-zone').value=cfg.timezone;$('#automation-days').value=cfg.lookahead_days;$('#automation-last').textContent=data.last_run?`Last run: ${data.last_run.status} · ${data.last_run.runs_created} events researched`:'No scheduled run yet.';}
 async function loadAutomation(){showAutomation(await api('/api/agent/automation'));}
 $('#automation-form').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{showAutomation(await api('/api/agent/automation',{enabled:$('#automation-enabled').checked,time:$('#automation-time').value,timezone:$('#automation-zone').value,lookahead_days:Number($('#automation-days').value)}));$('#automation-status').textContent='Schedule saved.';}catch(error){$('#automation-status').textContent=error.message;}finally{button.disabled=false;}};
 

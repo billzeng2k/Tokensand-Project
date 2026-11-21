@@ -100,3 +100,10 @@ def test_same_day_recurring_event_without_end():
     row=event(start={'date':'2020-11-20'},recurrence=['RRULE:FREQ=YEARLY'])
     result=calendar.view({'records':[row],'synced_at':'now'},today=date(2026,11,20))
     assert result['events'][0]['date']=='2026-11-20'
+
+def test_calendar_description_preserved_and_bounded():
+    description='Festive dress code. Bring a vegetarian side; plates supplied.'
+    result=calendar.view({'records':[event(description=description)],'synced_at':'now'},today=date(2026,11,20))
+    assert result['events'][0]['description']==description
+    assert calendar.normalize(event(description=None),'now')['description']==''
+    assert len(calendar.normalize(event(description='x'*7000),'now')['description'])==6000

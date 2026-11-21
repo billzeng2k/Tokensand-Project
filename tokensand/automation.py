@@ -23,7 +23,7 @@ def save(values):
     if not isinstance(result['time'],str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',result['time']):raise ValueError('Choose a valid daily time')
     try:ZoneInfo(result['timezone'])
     except (ZoneInfoNotFoundError,TypeError,ValueError):raise ValueError('Choose a valid IANA timezone')
-    if type(result['lookahead_days']) is not int or not 1<=result['lookahead_days']<=30:raise ValueError('Look ahead must be 1–30 days')
+    if type(result['lookahead_days']) is not int or result['lookahead_days']<1:raise ValueError('Look ahead must be a positive whole number of days')
     with ledger.db() as c:c.execute('INSERT OR REPLACE INTO settings VALUES(3,?)',(json.dumps(result),))
     return result
 
@@ -33,9 +33,8 @@ def status():
     return {'settings':settings(),'last_run':json.loads(row[0]) if row else None,'research_queued':tenancy.USER.get() in SYNC_QUEUED}
 
 def occasion(e):
-    title=e.get('title','').lower()
-    if re.search(r'\b(sleep|bedtime|wake up|commute|focus time|standup|stand-up|daily sync)\b',title) and not re.search(r'\b(party|birthday|wedding|trip|camping|gift|shopping)\b',title):return False
-    return e.get('kind') in ('birthday','holiday') or bool(re.search(r'\b(birthday|bday|party|potluck|thanksgiving|christmas|halloween|hanukkah|diwali|eid|easter|holiday|wedding|anniversary|graduation|baby shower|bridal shower|housewarming|gift|shopping|groceries|flight|travel|trip|vacation|camping|hiking|picnic|barbecue|bbq|dinner|hosting|festival|concert|costume|moving|move-in|skiing|marathon|beach)\b',title))
+    return e.get('title','').strip().casefold() != 'sleep'
+
 
 def covered(event_id):
     with ledger.db() as c:rows=c.execute('SELECT payload FROM runs').fetchall()
@@ -59,7 +58,7 @@ def run(snapshot=None):
         snapshot=sync() if scheduled else snapshot # Failure stops the run; never research from stale data.
         for event in snapshot['events']:
             if scheduled and not settings()['enabled']:break
-            if not today<=datetime.fromisoformat(event['date']).date()<=today+timedelta(days=cfg['lookahead_days']) or not occasion(event):continue
+            if not 0<=(datetime.fromisoformat(event['date']).date()-today).days<=cfg['lookahead_days'] or not occasion(event):continue
             if covered(event['id']):result['skipped']+=1;continue
             item=ledger.create_run('Review this upcoming event and recommend Amazon products only for a concrete need. Consider owned items and preferences first.', 'live', trigger='daily' if scheduled else 'calendar_sync',event_id=event['id'])
             result['run_ids'].append(item['id']);result['runs_created']+=1

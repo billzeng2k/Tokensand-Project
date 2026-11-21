@@ -232,3 +232,12 @@ def test_product_thumbnail_keeps_amazon_image():
     image='https://m.media-amazon.com/images/I/test.jpg'
     result['groups'][0]['items'][0]['image_url']=image
     assert agent.validate_result(result,sources,8000,'demo')['items'][0]['image_url']==image
+
+def test_calendar_description_reaches_agent_context(monkeypatch):
+    from tokensand import calendar
+    description='Holiday dinner: festive dress, bring a vegetarian side; plates supplied.'
+    e={'id':'a'*64,'title':'Dinner','description':description,'date':date.today().isoformat(),'status':'confirmed','source':'airbyte-google-calendar','synced_at':'now'}
+    monkeypatch.setattr(calendar,'selected_event',lambda id:e)
+    result=agent.execute(ledger.create_run('Help me prepare','demo',event_id=e['id'])['id'])
+    assert result['context']['event']['description']==description
+    assert ledger.get(result['id'])['context']['event']['description']==description

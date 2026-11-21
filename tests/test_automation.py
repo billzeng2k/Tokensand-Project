@@ -12,7 +12,9 @@ def isolated(tmp_path,monkeypatch):
 
 def test_validation_and_isolation(isolated):
     a.save({'enabled':True,'time':'09:30'})
-    with pytest.raises(ValueError):a.save({'lookahead_days':31})
+    assert a.save({'lookahead_days':60})['lookahead_days']==60
+    with pytest.raises(ValueError):a.save({'lookahead_days':0})
+    with pytest.raises(ValueError):a.save({'lookahead_days':1.5})
     with pytest.raises(ValueError):a.save({'time':'24:00'})
     with pytest.raises(ValueError):a.save({'timezone':'bad/timezone'})
     with tenancy.scope('b'*64):assert not a.settings()['enabled']
@@ -69,3 +71,17 @@ def test_sync_queue_coalesces_and_preserves_account(isolated,monkeypatch):
     assert len(queued)==1
     queued[0]()
     assert 'a'*64 not in a.SYNC_QUEUED
+
+
+@pytest.mark.parametrize('title',["Help Erica move in","Move-in day","Moving day"])
+def test_moving_occasions(title):
+    assert a.occasion({'title':title,'kind':'event'})
+
+
+@pytest.mark.parametrize('title',['Movie night','Team meeting','Lunch','Commute','Focus time','Bedtime','Sleepover','Time to sleep','Sleep workshop'])
+def test_only_sleep_is_filtered(title):
+    assert a.occasion({'title':title})
+
+@pytest.mark.parametrize('title',['Sleep','sleep','SLEEP',' Sleep '])
+def test_sleep_denylist(title):
+    assert not a.occasion({'title':title})

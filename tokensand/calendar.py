@@ -98,6 +98,7 @@ def normalize(r, synced_at):
     identity = json.dumps(identity_parts, separators=(',', ':'))
     kind, kind_source = event_kind(r)
     return {'id': hashlib.sha256(identity.encode()).hexdigest(), 'title': r.get('summary', '(Untitled event)'),
+            'description': (r.get('description') or '')[:6000],
             'date': day, 'status': r.get('status', 'confirmed'), 'need': 'jacket',
             'source': 'airbyte-google-calendar', 'calendar_id': r['calendar_id'], 'google_event_id': r['id'],
             'updated': r.get('updated'), 'start': start, 'end': r.get('end'), 'synced_at': synced_at,
